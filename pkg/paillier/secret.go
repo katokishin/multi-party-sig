@@ -2,6 +2,8 @@ package paillier
 
 import (
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -28,21 +30,21 @@ var (
 type SecretKey struct {
 	*PublicKey
 	// p, q such that N = p⋅q
-	p, q *safenum.Nat
+	Pv, Qv *safenum.Nat
 	// phi = ϕ = (p-1)(q-1)
-	phi *safenum.Nat
+	Phiv *safenum.Nat
 	// phiInv = ϕ⁻¹ mod N
-	phiInv *safenum.Nat
+	PhiInv *safenum.Nat
 }
 
 // P returns the first of the two factors composing this key.
 func (sk *SecretKey) P() *safenum.Nat {
-	return sk.p
+	return sk.Pv
 }
 
 // Q returns the second of the two factors composing this key.
 func (sk *SecretKey) Q() *safenum.Nat {
-	return sk.q
+	return sk.Qv
 }
 
 // Phi returns ϕ = (P-1)(Q-1).
@@ -52,7 +54,7 @@ func (sk *SecretKey) Q() *safenum.Nat {
 //
 // This quantity is useful in ZK proofs.
 func (sk *SecretKey) Phi() *safenum.Nat {
-	return sk.phi
+	return sk.Phiv
 }
 
 // KeyGen generates a new PublicKey and it's associated SecretKey.
@@ -90,15 +92,15 @@ func NewSecretKeyFromPrimes(P, Q *safenum.Nat) *SecretKey {
 	nSquared := arith.ModulusFromFactors(pSquared, qSquared)
 
 	return &SecretKey{
-		p:      P,
-		q:      Q,
-		phi:    phi,
-		phiInv: phiInv,
+		Pv:     P,
+		Qv:     Q,
+		Phiv:   phi,
+		PhiInv: phiInv,
 		PublicKey: &PublicKey{
-			n:        n,
-			nSquared: nSquared,
-			nNat:     nNat,
-			nPlusOne: nPlusOne,
+			Nv:       n,
+			NSquared: nSquared,
+			NNat:     nNat,
+			NPlusOne: nPlusOne,
 		},
 	}
 }
@@ -108,17 +110,17 @@ func NewSecretKeyFromPrimes(P, Q *safenum.Nat) *SecretKey {
 func (sk *SecretKey) Dec(ct *Ciphertext) (*safenum.Int, error) {
 	oneNat := new(safenum.Nat).SetUint64(1)
 
-	n := sk.PublicKey.n.Modulus
+	n := sk.PublicKey.Nv.Modulus
 
 	if !sk.PublicKey.ValidateCiphertexts(ct) {
 		return nil, errors.New("paillier: failed to decrypt invalid ciphertext")
 	}
 
-	phi := sk.phi
-	phiInv := sk.phiInv
+	phi := sk.Phiv
+	phiInv := sk.PhiInv
 
 	// r = c^Phi 						(mod N²)
-	result := sk.PublicKey.nSquared.Exp(ct.c, phi)
+	result := sk.PublicKey.NSquared.Exp(ct.C, phi)
 	// r = c^Phi - 1
 	result.Sub(result, oneNat, -1)
 	// r = [(c^Phi - 1)/N]
@@ -139,18 +141,18 @@ func (sk *SecretKey) DecWithRandomness(ct *Ciphertext) (*safenum.Int, *safenum.N
 	mNeg := new(safenum.Int).SetInt(m).Neg(1)
 
 	// x = C(N+1)⁻ᵐ (mod N)
-	x := sk.n.ExpI(sk.nPlusOne, mNeg)
-	x.ModMul(x, ct.c, sk.n.Modulus)
+	x := sk.Nv.ExpI(sk.NPlusOne, mNeg)
+	x.ModMul(x, ct.C, sk.Nv.Modulus)
 
 	// r = xⁿ⁻¹ (mod N)
-	nInverse := new(safenum.Nat).ModInverse(sk.nNat, safenum.ModulusFromNat(sk.phi))
-	r := sk.n.Exp(x, nInverse)
+	nInverse := new(safenum.Nat).ModInverse(sk.NNat, safenum.ModulusFromNat(sk.Phiv))
+	r := sk.Nv.Exp(x, nInverse)
 	return m, r, nil
 }
 
 func (sk SecretKey) GeneratePedersen() (*pedersen.Parameters, *safenum.Nat) {
-	s, t, lambda := sample.Pedersen(rand.Reader, sk.phi, sk.n.Modulus)
-	ped := pedersen.New(sk.n, s, t)
+	s, t, lambda := sample.Pedersen(rand.Reader, sk.Phiv, sk.Nv.Modulus)
+	ped := pedersen.New(sk.Nv, s, t)
 	return ped, lambda
 }
 
@@ -181,5 +183,60 @@ func ValidatePrime(p *safenum.Nat) error {
 	if !pMinus1Div2.Big().ProbablyPrime(1) {
 		return ErrNotSafePrime
 	}
+	return nil
+}
+
+func (sk SecretKey) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"PublicKey": sk.PublicKey,
+		"Pv":        sk.Pv.Bytes(),
+		"Qv":        sk.Qv.Bytes(),
+		"Phiv":      sk.Phiv.Bytes(),
+		"PhiInv":    sk.PhiInv.Bytes(),
+	})
+}
+
+func (sk *SecretKey) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("pailler secret key unmarshal failed @ tmp:", e)
+		return e
+	}
+
+	var pubkey PublicKey
+	if e := json.Unmarshal(tmp["PublicKey"], &pubkey); e != nil {
+		fmt.Println("pailler secret key unmarshal failed @ publickey:", e)
+		return e
+	}
+	sk.PublicKey = &pubkey
+
+	var pv safenum.Nat
+	tmpstr := string(tmp["Pv"][1 : len(tmp["Pv"])-1])
+	decode, _ := base64.StdEncoding.DecodeString(tmpstr)
+	pvbytes := []byte(decode)
+	pv.SetBytes(pvbytes)
+	sk.Pv = &pv
+
+	var qv safenum.Nat
+	tmpstr = string(tmp["Qv"][1 : len(tmp["Qv"])-1])
+	decode, _ = base64.StdEncoding.DecodeString(tmpstr)
+	qvbytes := []byte(decode)
+	qv.SetBytes(qvbytes)
+	sk.Qv = &qv
+
+	var phiv safenum.Nat
+	tmpstr = string(tmp["Phiv"][1 : len(tmp["Phiv"])-1])
+	decode, _ = base64.StdEncoding.DecodeString(tmpstr)
+	phivbytes := []byte(decode)
+	phiv.SetBytes(phivbytes)
+	sk.Phiv = &phiv
+
+	var phiinv safenum.Nat
+	tmpstr = string(tmp["PhiInv"][1 : len(tmp["PhiInv"])-1])
+	decode, _ = base64.StdEncoding.DecodeString(tmpstr)
+	phiinvbytes := []byte(decode)
+	phiinv.SetBytes(phiinvbytes)
+	sk.PhiInv = &phiinv
+
 	return nil
 }

@@ -1,0 +1,77 @@
+alice is processing round 1
+bob is processing round 1
+charlie is processing round 1
+We are not the recipient for this message
+alice is processing round 2
+We are not the recipient for this message
+bob is processing round 2
+We are not the recipient for this message
+charlie is processing round 2
+We are not the recipient for this message
+alice is processing round 3
+We are not the recipient for this message
+bob is processing round 3
+We are not the recipient for this message
+charlie is processing round 3
+We are not the recipient for this message
+We are not the recipient for this message
+We are not the recipient for this message
+Successfully validated VSS share from bob
+We are not the recipient for this message
+Successfully validated VSS share from charlie
+We are not the recipient for this message
+alice is processing round 4
+Successfully validated VSS share from alice
+We are not the recipient for this message
+We are not the recipient for this message
+We are not the recipient for this message
+We are not the recipient for this message
+We are not the recipient for this message
+Successfully validated VSS share from charlie
+bob is processing round 4
+We are not the recipient for this message
+Successfully validated VSS share from alice
+We are not the recipient for this message
+Successfully validated VSS share from bob
+We are not the recipient for this message
+We are not the recipient for this message
+We are not the recipient for this message
+charlie is processing round 4
+We are not the recipient for this message
+alice is processing round 5
+We are not the recipient for this message
+bob is processing round 5
+We are not the recipient for this message
+charlie is processing round 5
+==============Keygen complete===============
+Alice's config: &{Group:{} ID:alice Threshold:1 ECDSA:0xc000023960 ElGamal:0xc000022660 Paillier:0xc00007cff0 RID:[20 91 187 182 178 173 150 209 218 219 224 38 129 4 184 177 115 148 52 44 31 31 16 203 81 173 243 226 153 213 43 203] ChainKey:[213 137 141 157 147 245 8 67 53 204 222 40 42 120 178 163 85 53 86 208 181 96 124 37 168 32 228 249 220 222 210 170] Public:map[alice:0xc0131779b0 bob:0xc013177a10 charlie:0xc013177a70]}
+Bob's config: &{Group:{} ID:bob Threshold:1 ECDSA:0xc000023e60 ElGamal:0xc000022a40 Paillier:0xc00716d950 RID:[20 91 187 182 178 173 150 209 218 219 224 38 129 4 184 177 115 148 52 44 31 31 16 203 81 173 243 226 153 213 43 203] ChainKey:[213 137 141 157 147 245 8 67 53 204 222 40 42 120 178 163 85 53 86 208 181 96 124 37 168 32 228 249 220 222 210 170] Public:map[alice:0xc013cfe000 bob:0xc013cfe060 charlie:0xc013cfe0c0]}
+Charlie's config: &{Group:{} ID:charlie Threshold:1 ECDSA:0xc013d0c260 ElGamal:0xc000022c00 Paillier:0xc00716dfb0 RID:[20 91 187 182 178 173 150 209 218 219 224 38 129 4 184 177 115 148 52 44 31 31 16 203 81 173 243 226 153 213 43 203] ChainKey:[213 137 141 157 147 245 8 67 53 204 222 40 42 120 178 163 85 53 86 208 181 96 124 37 168 32 228 249 220 222 210 170] Public:map[alice:0xc01415a720 bob:0xc01415a780 charlie:0xc01415a7e0]}
+Attempting BIP32 child key derivation...
+alice is processing round 1
+bob is processing round 1
+We are not the recipient for this message
+We are not the recipient for this message
+alice is processing round 2
+We are not the recipient for this message
+We are not the recipient for this message
+bob is processing round 2
+We are not the recipient for this message
+We are not the recipient for this message
+alice is processing round 3
+We are not the recipient for this message
+We are not the recipient for this message
+bob is processing round 3
+We are not the recipient for this message
+We are not the recipient for this message
+alice is processing round 4
+We are not the recipient for this message
+We are not the recipient for this message
+bob is processing round 4
+We are not the recipient for this message
+alice is processing round 5
+We are not the recipient for this message
+bob is processing round 5
+Signing complete!
+&{R:0xc014cb0980 S:0xc014883e00} [58 151 205 122 105 198 151 24 109 252 245 129 116 74 80 48 115 218 176 252 162 37 82 118 128 85 78 91 214 79 91 169 73 251 27 83 60 95 129 107 140 228 118 51 60 48 4 52 180 39 145 107 142 6 189 29 2 246 159 92 226 128 238 231 0]
+&{R:0xc014cb1000 S:0xc014883f40} [58 151 205 122 105 198 151 24 109 252 245 129 116 74 80 48 115 218 176 252 162 37 82 118 128 85 78 91 214 79 91 169 73 251 27 83 60 95 129 107 140 228 118 51 60 48 4 52 180 39 145 107 142 6 189 29 2 246 159 92 226 128 238 231 0]

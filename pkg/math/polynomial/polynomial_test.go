@@ -26,9 +26,9 @@ func TestPolynomial_Evaluate(t *testing.T) {
 	group := curve.Secp256k1{}
 
 	polynomial := &Polynomial{group, make([]curve.Scalar, 3)}
-	polynomial.coefficients[0] = group.NewScalar().SetNat(new(safenum.Nat).SetUint64(1))
-	polynomial.coefficients[1] = group.NewScalar()
-	polynomial.coefficients[2] = group.NewScalar().SetNat(new(safenum.Nat).SetUint64(1))
+	polynomial.Coefficients[0] = group.NewScalar().SetNat(new(safenum.Nat).SetUint64(1))
+	polynomial.Coefficients[1] = group.NewScalar()
+	polynomial.Coefficients[2] = group.NewScalar().SetNat(new(safenum.Nat).SetUint64(1))
 
 	for index := 0; index < 100; index++ {
 		x := big.NewInt(int64(mrand.Uint32()))

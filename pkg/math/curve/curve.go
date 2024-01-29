@@ -33,6 +33,8 @@ type Curve interface {
 	SafeScalarBytes() int
 	// Order returns a Modulus holding order of this group.
 	Order() *safenum.Modulus
+
+	UnmarshalJSON([]byte) error
 }
 
 // Scalar represents a number modulo the order of some Elliptic Curve group.
@@ -91,6 +93,9 @@ type Scalar interface {
 	//
 	// This can be accomplished with Act, but can be made more efficient, in many cases.
 	ActOnBase() Point
+
+	IsOverHalfOrder() bool
+	UnmarshalJSON([]byte) error
 }
 
 // Point represents an element of our Elliptic Curve group.
@@ -136,6 +141,8 @@ type Point interface {
 	//
 	// If you choose not to implement this method, simply return nil.
 	XScalar() Scalar
+
+	UnmarshalJSON([]byte) error
 }
 
 // MakeInt converts a scalar into an Int.

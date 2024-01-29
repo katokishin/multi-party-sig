@@ -2,6 +2,8 @@ package paillier
 
 import (
 	"crypto/rand"
+	"encoding/json"
+	"fmt"
 	"io"
 
 	"github.com/cronokirby/safenum"
@@ -11,7 +13,7 @@ import (
 
 // Ciphertext represents an integer of the for (1+N)ᵐρᴺ (mod N²), representing the encryption of m ∈ ℤₙˣ.
 type Ciphertext struct {
-	c *safenum.Nat
+	C *safenum.Nat
 }
 
 // Add sets ct to the homomorphic sum ct ⊕ ct₂.
@@ -21,7 +23,7 @@ func (ct *Ciphertext) Add(pk *PublicKey, ct2 *Ciphertext) *Ciphertext {
 		return ct
 	}
 
-	ct.c.ModMul(ct.c, ct2.c, pk.nSquared.Modulus)
+	ct.C.ModMul(ct.C, ct2.C, pk.NSquared.Modulus)
 
 	return ct
 }
@@ -33,21 +35,21 @@ func (ct *Ciphertext) Mul(pk *PublicKey, k *safenum.Int) *Ciphertext {
 		return ct
 	}
 
-	ct.c = pk.nSquared.ExpI(ct.c, k)
+	ct.C = pk.NSquared.ExpI(ct.C, k)
 
 	return ct
 }
 
 // Equal check whether ct ≡ ctₐ (mod N²).
 func (ct *Ciphertext) Equal(ctA *Ciphertext) bool {
-	return ct.c.Eq(ctA.c) == 1
+	return ct.C.Eq(ctA.C) == 1
 }
 
 // Clone returns a deep copy of ct.
 func (ct Ciphertext) Clone() *Ciphertext {
 	c := new(safenum.Nat)
-	c.SetNat(ct.c)
-	return &Ciphertext{c: c}
+	c.SetNat(ct.C)
+	return &Ciphertext{C: c}
 }
 
 // Randomize multiplies the ciphertext's nonce by a newly generated one.
@@ -56,11 +58,11 @@ func (ct Ciphertext) Clone() *Ciphertext {
 // The receiver is updated, and the nonce update is returned.
 func (ct *Ciphertext) Randomize(pk *PublicKey, nonce *safenum.Nat) *safenum.Nat {
 	if nonce == nil {
-		nonce = sample.UnitModN(rand.Reader, pk.n.Modulus)
+		nonce = sample.UnitModN(rand.Reader, pk.Nv.Modulus)
 	}
 	// c = c*r^N
-	tmp := pk.nSquared.Exp(nonce, pk.nNat)
-	ct.c.ModMul(ct.c, tmp, pk.nSquared.Modulus)
+	tmp := pk.NSquared.Exp(nonce, pk.NNat)
+	ct.C.ModMul(ct.C, tmp, pk.NSquared.Modulus)
 	return nonce
 }
 
@@ -70,7 +72,7 @@ func (ct *Ciphertext) WriteTo(w io.Writer) (int64, error) {
 		return 0, io.ErrUnexpectedEOF
 	}
 	buf := make([]byte, params.BytesCiphertext)
-	ct.c.FillBytes(buf)
+	ct.C.FillBytes(buf)
 	n, err := w.Write(buf)
 	return int64(n), err
 }
@@ -81,14 +83,40 @@ func (*Ciphertext) Domain() string {
 }
 
 func (ct *Ciphertext) MarshalBinary() ([]byte, error) {
-	return ct.c.MarshalBinary()
+	return ct.C.MarshalBinary()
 }
 
 func (ct *Ciphertext) UnmarshalBinary(data []byte) error {
-	ct.c = new(safenum.Nat)
-	return ct.c.UnmarshalBinary(data)
+	ct.C = new(safenum.Nat)
+	return ct.C.UnmarshalBinary(data)
+}
+
+func (ct *Ciphertext) MarshalJSON() ([]byte, error) {
+	cb, e := ct.C.MarshalBinary()
+	if e != nil {
+		return nil, e
+	}
+	return json.Marshal(map[string]interface{}{
+		"C": cb,
+	})
+}
+
+func (ct *Ciphertext) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("Unmarshal Ciphertext failed @ tmp:", e)
+		return e
+	}
+
+	var c []byte
+	if e := json.Unmarshal(tmp["C"], &c); e != nil {
+		fmt.Println("Unmarshal Ciphertext failed @ c:", e)
+		return e
+	}
+	ct.UnmarshalBinary(j)
+	return nil
 }
 
 func (ct *Ciphertext) Nat() *safenum.Nat {
-	return new(safenum.Nat).SetNat(ct.c)
+	return new(safenum.Nat).SetNat(ct.C)
 }

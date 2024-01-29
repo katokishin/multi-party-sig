@@ -2,14 +2,12 @@ package cmp
 
 import (
 	"github.com/taurusgroup/multi-party-sig/internal/round"
-	"github.com/taurusgroup/multi-party-sig/pkg/ecdsa"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
 	"github.com/taurusgroup/multi-party-sig/pkg/pool"
 	"github.com/taurusgroup/multi-party-sig/pkg/protocol"
 	"github.com/taurusgroup/multi-party-sig/protocols/cmp/config"
 	"github.com/taurusgroup/multi-party-sig/protocols/cmp/keygen"
-	"github.com/taurusgroup/multi-party-sig/protocols/cmp/presign"
 	"github.com/taurusgroup/multi-party-sig/protocols/cmp/sign"
 )
 
@@ -63,19 +61,4 @@ func Refresh(config *Config, pl *pool.Pool) protocol.StartFunc {
 // Returns *ecdsa.Signature if successful.
 func Sign(config *Config, signers []party.ID, messageHash []byte, pl *pool.Pool) protocol.StartFunc {
 	return sign.StartSign(config, signers, messageHash, pl)
-}
-
-// Presign generates a preprocessed signature that does not depend on the message being signed.
-// When the message becomes available, the same participants can efficiently combine their shares
-// to produce a full signature with the PresignOnline protocol.
-// Note: the PreSignatures should be treated as secret key material.
-// Returns *ecdsa.PreSignature if successful.
-func Presign(config *Config, signers []party.ID, pl *pool.Pool) protocol.StartFunc {
-	return presign.StartPresign(config, signers, nil, pl)
-}
-
-// PresignOnline efficiently generates an ECDSA signature for `messageHash` given a preprocessed `PreSignature`.
-// Returns *ecdsa.Signature if successful.
-func PresignOnline(config *Config, preSignature *ecdsa.PreSignature, messageHash []byte, pl *pool.Pool) protocol.StartFunc {
-	return presign.StartPresignOnline(config, preSignature, messageHash, pl)
 }

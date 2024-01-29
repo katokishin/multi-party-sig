@@ -1,10 +1,12 @@
 package keygen
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/cronokirby/safenum"
+	"github.com/taurusgroup/multi-party-sig/internal/jsontools"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/internal/types"
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
@@ -18,16 +20,19 @@ import (
 	zksch "github.com/taurusgroup/multi-party-sig/pkg/zk/sch"
 )
 
-var _ round.Round = (*round3)(nil)
+var _ round.Round = (*Kround3)(nil)
 
-type round3 struct {
-	*round2
+type Kround3 struct {
+	*Kround2
 	// SchnorrCommitments[j] = Aⱼ
 	// Commitment for proof of knowledge in the last round
 	SchnorrCommitments map[party.ID]*zksch.Commitment // Aⱼ
+
+	VSSSecrets      map[party.ID]*polynomial.Polynomial
+	PaillierSecrets map[party.ID]*paillier.SecretKey
 }
 
-type broadcast3 struct {
+type Broadcast3 struct {
 	round.NormalBroadcastContent
 	// RID = RIDᵢ
 	RID types.RID
@@ -53,30 +58,36 @@ type broadcast3 struct {
 // - verify degree of VSS polynomial Fⱼ "in-the-exponent"
 //   - if keygen, verify Fⱼ(0) != ∞
 //   - if refresh, verify Fⱼ(0) == ∞
+//
 // - validate Paillier
 // - validate Pedersen
 // - validate commitments.
 // - store ridⱼ, Cⱼ, Nⱼ, Sⱼ, Tⱼ, Fⱼ(X), Aⱼ.
-func (r *round3) StoreBroadcastMessage(msg round.Message) error {
+func (r *Kround3) StoreBroadcastMessage(msg round.Message) error {
 	from := msg.From
-	body, ok := msg.Content.(*broadcast3)
+	body, ok := msg.Content.(*Broadcast3)
 	if !ok || body == nil {
+		fmt.Println("kr3.storebroadcastmessage: invalid content")
 		return round.ErrInvalidContent
 	}
 
 	// check nil
 	if body.N == nil || body.S == nil || body.T == nil || body.VSSPolynomial == nil {
+		fmt.Println("kr3.storebroadcastmessage: nil field(s) detected")
 		return round.ErrNilFields
 	}
 	// check RID length
 	if err := body.RID.Validate(); err != nil {
+		fmt.Println("kr3.storebroadcastmessage: wrong rid length")
 		return fmt.Errorf("rid: %w", err)
 	}
 	if err := body.C.Validate(); err != nil {
+		fmt.Println("kr3.storebroadcastmessage: chainkey invalid")
 		return fmt.Errorf("chainkey: %w", err)
 	}
 	// check decommitment
 	if err := body.Decommitment.Validate(); err != nil {
+		fmt.Println("kr3.storebroadcastmessage: decommitment validation failure")
 		return err
 	}
 
@@ -85,25 +96,30 @@ func (r *round3) StoreBroadcastMessage(msg round.Message) error {
 	// check that the constant coefficient is 0
 	// if refresh then the polynomial is constant
 	if !(r.VSSSecret.Constant().IsZero() == VSSPolynomial.IsConstant) {
+		fmt.Println("kr3.storebroadcastmessage: vss polynomial has incorrect constant")
 		return errors.New("vss polynomial has incorrect constant")
 	}
 	// check deg(Fⱼ) = t
 	if VSSPolynomial.Degree() != r.Threshold() {
+		fmt.Println("kr3.storebroadcastmessage: vss polynomial has incorrect degree")
 		return errors.New("vss polynomial has incorrect degree")
 	}
 
 	// Set Paillier
 	if err := paillier.ValidateN(body.N); err != nil {
+		fmt.Println("kr3.storebroadcastmessage: paillier validateN failure")
 		return err
 	}
 
 	// Verify Pedersen
 	if err := pedersen.ValidateParameters(body.N, body.S, body.T); err != nil {
+		fmt.Println("kr3.storebroadcastmessage: pedersen verification failure")
 		return err
 	}
 	// Verify decommit
 	if !r.HashForID(from).Decommit(r.Commitments[from], body.Decommitment,
 		body.RID, body.C, VSSPolynomial, body.SchnorrCommitments, body.ElGamalPublic, body.N, body.S, body.T) {
+		fmt.Println("kr3.StoreBroadcastMessage(): failed to decommit")
 		return errors.New("failed to decommit")
 	}
 	r.RIDs[from] = body.RID
@@ -120,10 +136,10 @@ func (r *round3) StoreBroadcastMessage(msg round.Message) error {
 }
 
 // VerifyMessage implements round.Round.
-func (round3) VerifyMessage(round.Message) error { return nil }
+func (Kround3) VerifyMessage(round.Message) error { return nil }
 
 // StoreMessage implements round.Round.
-func (round3) StoreMessage(round.Message) error { return nil }
+func (Kround3) StoreMessage(round.Message) error { return nil }
 
 // Finalize implements round.Round
 //
@@ -134,7 +150,7 @@ func (round3) StoreMessage(round.Message) error { return nil }
 //   - if refresh skip constant coefficient
 //
 // - send proofs and encryption of share for Pⱼ.
-func (r *round3) Finalize(out chan<- *round.Message) (round.Session, error) {
+func (r *Kround3) Finalize(out []*round.Message) (round.Session, []*round.Message, error) {
 	// c = ⊕ⱼ cⱼ
 	chainKey := r.PreviousChainKey
 	if chainKey == nil {
@@ -158,7 +174,7 @@ func (r *round3) Finalize(out chan<- *round.Message) (round.Session, error) {
 		P:   r.PaillierSecret.P(),
 		Q:   r.PaillierSecret.Q(),
 		Phi: r.PaillierSecret.Phi(),
-	}, zkmod.Public{N: r.NModulus[r.SelfID()]}, r.Pool)
+	}, zkmod.Public{N: r.NModulus[r.SelfID()]}, nil)
 
 	// prove s, t are correct as aux parameters with zkprm
 	prm := zkprm.NewProof(zkprm.Private{
@@ -166,14 +182,12 @@ func (r *round3) Finalize(out chan<- *round.Message) (round.Session, error) {
 		Phi:    r.PaillierSecret.Phi(),
 		P:      r.PaillierSecret.P(),
 		Q:      r.PaillierSecret.Q(),
-	}, h.Clone(), zkprm.Public{N: r.NModulus[r.SelfID()], S: r.S[r.SelfID()], T: r.T[r.SelfID()]}, r.Pool)
+	}, h.Clone(), zkprm.Public{N: r.NModulus[r.SelfID()], S: r.S[r.SelfID()], T: r.T[r.SelfID()]}, nil)
 
-	if err := r.BroadcastMessage(out, &broadcast4{
+	out = r.BroadcastMessage(out, &Broadcast4{
 		Mod: mod,
 		Prm: prm,
-	}); err != nil {
-		return r, err
-	}
+	})
 
 	// create messages with encrypted shares
 	for _, j := range r.OtherPartyIDs() {
@@ -182,32 +196,29 @@ func (r *round3) Finalize(out chan<- *round.Message) (round.Session, error) {
 		// Encrypt share
 		C, _ := r.PaillierPublic[j].Enc(curve.MakeInt(share))
 
-		err := r.SendMessage(out, &message4{
+		out = r.SendMessage(out, &Message4{
 			Share: C,
 		}, j)
-		if err != nil {
-			return r, err
-		}
 	}
 
 	// Write rid to the hash state
 	r.UpdateHashState(rid)
-	return &round4{
-		round3:   r,
+	return &Kround4{
+		Kround3:  r,
 		RID:      rid,
 		ChainKey: chainKey,
-	}, nil
+	}, out, nil
 }
 
 // MessageContent implements round.Round.
-func (round3) MessageContent() round.Content { return nil }
+func (Kround3) MessageContent() round.Content { return nil }
 
 // RoundNumber implements round.Content.
-func (broadcast3) RoundNumber() round.Number { return 3 }
+func (Broadcast3) RoundNumber() round.Number { return 3 }
 
 // BroadcastContent implements round.BroadcastRound.
-func (r *round3) BroadcastContent() round.BroadcastContent {
-	return &broadcast3{
+func (r *Kround3) BroadcastContent() round.BroadcastContent {
+	return &Broadcast3{
 		VSSPolynomial:      polynomial.EmptyExponent(r.Group()),
 		SchnorrCommitments: zksch.EmptyCommitment(r.Group()),
 		ElGamalPublic:      r.Group().NewPoint(),
@@ -215,4 +226,160 @@ func (r *round3) BroadcastContent() round.BroadcastContent {
 }
 
 // Number implements round.Round.
-func (round3) Number() round.Number { return 3 }
+func (Kround3) Number() round.Number { return 3 }
+
+func (r Kround3) MarshalJSON() ([]byte, error) {
+	mr3, e := json.Marshal(map[string]interface{}{
+		"SchnorrCommitments": r.SchnorrCommitments,
+	})
+	if e != nil {
+		fmt.Println(e)
+		return nil, e
+	}
+	r2, e := json.Marshal(r.Kround2)
+	if e != nil {
+		fmt.Println(e)
+		return nil, e
+	}
+	return jsontools.JoinJSON(mr3, r2)
+}
+
+func (r *Kround3) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if err := json.Unmarshal(j, &tmp); err != nil {
+		fmt.Println("Failed to unmarshal kr3 @ tmp")
+		return err
+	}
+
+	var r2 *Kround2
+	if err := json.Unmarshal(j, &r2); err != nil {
+		fmt.Println("Failed to unmarshal kr3 @ r2")
+		return err
+	}
+
+	schc := make(map[party.ID]*zksch.Commitment)
+	if err := json.Unmarshal(tmp["SchnorrCommitments"], &schc); err != nil {
+		fmt.Println("Failed to unmarshal kr3 @ SchnorrCommitments")
+		return err
+	}
+	r.Kround2 = r2
+	r.SchnorrCommitments = schc
+	return nil
+}
+
+func (b Broadcast3) MarshalJSON() ([]byte, error) {
+	nb, e := b.N.MarshalBinary()
+	if e != nil {
+		fmt.Println("Failed to MarshalBinary Broadcast3.N")
+		return nil, e
+	}
+	sb, e := b.S.MarshalBinary()
+	if e != nil {
+		fmt.Println("Failed to MarshalBinary Broadcast3.S")
+		return nil, e
+	}
+	tb, e := b.T.MarshalBinary()
+	if e != nil {
+		fmt.Println("Failed to MarshalBinary Broadcast3.T")
+		return nil, e
+	}
+	return json.Marshal(map[string]interface{}{
+		"RID":                b.RID,
+		"C":                  b.C,
+		"VSSPolynomial":      b.VSSPolynomial,
+		"SchnorrCommitments": b.SchnorrCommitments,
+		"ElGamalPublic":      b.ElGamalPublic,
+		"N":                  nb,
+		"S":                  sb,
+		"T":                  tb,
+		"Decommitment":       b.Decommitment,
+	})
+}
+
+func (b *Broadcast3) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ tmp:", e)
+		return e
+	}
+
+	var rid types.RID
+	if e := json.Unmarshal(tmp["RID"], &rid); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ rid:", e)
+		return e
+	}
+
+	var c types.RID
+	if e := json.Unmarshal(tmp["C"], &c); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ c:", e)
+		return e
+	}
+
+	var vss *polynomial.Exponent
+	if e := json.Unmarshal(tmp["VSSPolynomial"], &vss); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ vss:", e)
+		return e
+	}
+
+	var schc *zksch.Commitment
+	if e := json.Unmarshal(tmp["SchnorrCommitments"], &schc); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ schc:", e)
+		return e
+	}
+
+	var elg curve.Point
+	if e := json.Unmarshal(tmp["ElGamalPublic"], &elg); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ elg:", e)
+		return e
+	}
+
+	var nb []byte
+	if e := json.Unmarshal(tmp["N"], &nb); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ n:", e)
+		return e
+	}
+	var n *safenum.Modulus
+	if e := n.UnmarshalBinary(nb); e != nil {
+		fmt.Println("UnmarshalBinary failed for Broadcast3.N:", e)
+		return e
+	}
+
+	var sb []byte
+	if e := json.Unmarshal(tmp["S"], &sb); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ n:", e)
+		return e
+	}
+	var s *safenum.Modulus
+	if e := s.UnmarshalBinary(sb); e != nil {
+		fmt.Println("UnmarshalBinary failed for Broadcast3.S:", e)
+		return e
+	}
+
+	var tb []byte
+	if e := json.Unmarshal(tmp["T"], &tb); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ n:", e)
+		return e
+	}
+	var t *safenum.Modulus
+	if e := t.UnmarshalBinary(tb); e != nil {
+		fmt.Println("UnmarshalBinary failed for Broadcast3.T:", e)
+		return e
+	}
+
+	var decom hash.Decommitment
+	if e := json.Unmarshal(tmp["Decommitment"], &decom); e != nil {
+		fmt.Println("Broadcast3 unmarshal failed @ decom:", e)
+		return e
+	}
+
+	b.RID = rid
+	b.C = c
+	b.VSSPolynomial = vss
+	b.SchnorrCommitments = schc
+	b.ElGamalPublic = elg
+	b.N = n
+	b.S = s.Nat()
+	b.T = t.Nat()
+	b.Decommitment = decom
+	return nil
+}

@@ -44,7 +44,7 @@ func TestCiphertextValidate(t *testing.T) {
 	_, err := paillierSecret.Dec(ct)
 	assert.Error(t, err, "decrypting 0 should fail")
 
-	C.SetNat(paillierPublic.nNat)
+	C.SetNat(paillierPublic.NNat)
 	_, err = paillierSecret.Dec(ct)
 	assert.Error(t, err, "decrypting N should fail")
 
@@ -52,7 +52,7 @@ func TestCiphertextValidate(t *testing.T) {
 	_, err = paillierSecret.Dec(ct)
 	assert.Error(t, err, "decrypting 2N should fail")
 
-	C.SetNat(paillierPublic.nSquared.Nat())
+	C.SetNat(paillierPublic.NSquared.Nat())
 	_, err = paillierSecret.Dec(ct)
 	assert.Error(t, err, "decrypting N^2 should fail")
 }

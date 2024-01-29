@@ -2,14 +2,17 @@ package protocol
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
 
 	"github.com/fxamacker/cbor/v2"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
+	"github.com/taurusgroup/multi-party-sig/pkg/ecdsa"
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
+	"github.com/taurusgroup/multi-party-sig/protocols/cmp/config"
 )
 
 // StartFunc is function that creates the first round of a protocol.
@@ -24,7 +27,7 @@ type Handler interface {
 	// Result should return the result of running the protocol, or an error
 	Result() (interface{}, error)
 	// Listen returns a channel which will receive new messages
-	Listen() <-chan *Message
+	Listen() []*Message
 	// Stop should abort the protocol execution.
 	Stop()
 	// CanAccept checks whether or not a message can be accepted at the current point in the protocol.
@@ -36,15 +39,34 @@ type Handler interface {
 // MultiHandler represents an execution of a given protocol.
 // It provides a simple interface for the user to receive/deliver protocol messages.
 type MultiHandler struct {
-	currentRound    round.Session
-	rounds          map[round.Number]round.Session
-	err             *Error
-	result          interface{}
-	messages        map[round.Number]map[party.ID]*Message
-	broadcast       map[round.Number]map[party.ID]*Message
-	broadcastHashes map[round.Number][]byte
-	out             chan *Message
+	CurrentRound    round.Session
+	Rounds          map[round.Number]round.Session
+	Err             *Error
+	ResultObj       interface{}
+	Messages        map[round.Number]map[party.ID]*Message
+	Broadcast       map[round.Number]map[party.ID]*Message
+	BroadcastHashes map[round.Number][]byte
+	Out             []*Message
 	mtx             sync.Mutex
+}
+
+func (h *MultiHandler) GetCurrentRound() round.Number {
+	return h.CurrentRound.Number()
+}
+
+func (h *MultiHandler) GetConfigOrErr() (*config.Config, error) {
+	c, err := h.Result()
+	if err != nil {
+		return nil, err
+	}
+	return c.(*config.Config), nil
+}
+func (h *MultiHandler) GetSignatureOrErr() (*ecdsa.Signature, error) {
+	s, err := h.Result()
+	if err != nil {
+		return nil, err
+	}
+	return s.(*ecdsa.Signature), nil
 }
 
 // NewMultiHandler expects a StartFunc for the desired protocol. It returns a handler that the user can interact with.
@@ -54,14 +76,14 @@ func NewMultiHandler(create StartFunc, sessionID []byte) (*MultiHandler, error) 
 		return nil, fmt.Errorf("protocol: failed to create round: %w", err)
 	}
 	h := &MultiHandler{
-		currentRound:    r,
-		rounds:          map[round.Number]round.Session{r.Number(): r},
-		messages:        newQueue(r.OtherPartyIDs(), r.FinalRoundNumber()),
-		broadcast:       newQueue(r.OtherPartyIDs(), r.FinalRoundNumber()),
-		broadcastHashes: map[round.Number][]byte{},
-		out:             make(chan *Message, 2*r.N()),
+		CurrentRound:    r,
+		Rounds:          map[round.Number]round.Session{r.Number(): r},
+		Messages:        newQueue(r.OtherPartyIDs(), r.FinalRoundNumber()),
+		Broadcast:       newQueue(r.OtherPartyIDs(), r.FinalRoundNumber()),
+		BroadcastHashes: map[round.Number][]byte{},
+		Out:             make([]*Message, 0, 2*r.N()),
 	}
-	h.finalize()
+	// h.finalize()
 	return h, nil
 }
 
@@ -69,58 +91,67 @@ func NewMultiHandler(create StartFunc, sessionID []byte) (*MultiHandler, error) 
 func (h *MultiHandler) Result() (interface{}, error) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
-	if h.result != nil {
-		return h.result, nil
+	if h.ResultObj != nil {
+		return h.ResultObj, nil
 	}
-	if h.err != nil {
-		return nil, *h.err
+	if h.Err != nil {
+		return nil, *h.Err
 	}
 	return nil, errors.New("protocol: not finished")
 }
 
 // Listen returns a channel with outgoing messages that must be sent to other parties.
-// The message received should be _reliably_ broadcast if msg.Broadcast is true.
+// The message received should be _reliably_ Broadcast if msg.Broadcast is true.
 // The channel is closed when either an error occurs or the protocol detects an error.
-func (h *MultiHandler) Listen() <-chan *Message {
+func (h *MultiHandler) Listen() []*Message {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
-	return h.out
+	return h.Out
 }
 
 // CanAccept returns true if the message is designated for this protocol protocol execution.
 func (h *MultiHandler) CanAccept(msg *Message) bool {
-	r := h.currentRound
+	r := h.CurrentRound
 	if msg == nil {
+		fmt.Println("Message cannot be accepted as it is nil")
 		return false
 	}
 	// are we the intended recipient
 	if !msg.IsFor(r.SelfID()) {
+		fmt.Println("We are not the recipient for this message")
 		return false
 	}
 	// is the protocol ID correct
 	if msg.Protocol != r.ProtocolID() {
+		fmt.Println("Message cannot be accepted as it is not for the correct protocol")
 		return false
 	}
 	// check for same SSID
 	if !bytes.Equal(msg.SSID, r.SSID()) {
+		fmt.Printf("msg.SSID %+v, r.SSID %+v\n", msg.SSID, r.SSID())
+		fmt.Println("Message cannot be accepted as it does not have the same SSID")
 		return false
 	}
 	// do we know the sender
 	if !r.PartyIDs().Contains(msg.From) {
+		fmt.Println("Message cannot be accepted as we do not know the sender")
 		return false
 	}
 
 	// data is cannot be nil
 	if msg.Data == nil {
+		fmt.Println("Message cannot be accepted as message data is nil")
 		return false
 	}
 
 	// check if message for unexpected round
 	if msg.RoundNumber > r.FinalRoundNumber() {
+		fmt.Println("Message cannot be accepted as round number is greater than final")
 		return false
 	}
 
 	if msg.RoundNumber < r.Number() && msg.RoundNumber > 0 {
+		fmt.Println("Message cannot be accepted as round number is from past round")
 		return false
 	}
 
@@ -134,9 +165,9 @@ func (h *MultiHandler) CanAccept(msg *Message) bool {
 func (h *MultiHandler) Accept(msg *Message) {
 	h.mtx.Lock()
 	defer h.mtx.Unlock()
-
 	// exit early if the message is bad, or if we are already done
-	if !h.CanAccept(msg) || h.err != nil || h.result != nil || h.duplicate(msg) {
+	// I removed !h.CanAccept(msg) from the following condition since we already check
+	if h.Err != nil || h.ResultObj != nil || h.duplicate(msg) {
 		return
 	}
 
@@ -147,112 +178,185 @@ func (h *MultiHandler) Accept(msg *Message) {
 	}
 
 	h.store(msg)
-	if h.currentRound.Number() != msg.RoundNumber {
+	if h.CurrentRound.Number() != msg.RoundNumber {
 		return
 	}
 
 	if msg.Broadcast {
 		if err := h.verifyBroadcastMessage(msg); err != nil {
+			fmt.Println("verifyBroadcastMessage failed in handler.Accept(); message:", msg)
 			h.abort(err, msg.From)
 			return
 		}
 	} else {
 		if err := h.verifyMessage(msg); err != nil {
-			h.abort(err, msg.From)
+			fmt.Println("verifyMessage failed in handler.Accept(); message:", msg)
+
+			// h.abort(err, msg.From)
 			return
 		}
 	}
 
-	h.finalize()
+	// h.finalize()
 }
 
 func (h *MultiHandler) verifyBroadcastMessage(msg *Message) error {
-	r, ok := h.rounds[msg.RoundNumber]
+	r, ok := h.Rounds[msg.RoundNumber]
 	if !ok {
+		fmt.Println("verifyBroadcastMessage: relevant round not found in h.Rounds")
 		return nil
 	}
 
 	// try to convert the raw message into a round.Message
 	roundMsg, err := getRoundMessage(msg, r)
 	if err != nil {
+		fmt.Println("verifyBroadcastMessage: could not convert raw message into round.Message")
 		return err
 	}
 
-	// store the broadcast message for this round
+	// store the Broadcast message for this round
 	if err = r.(round.BroadcastRound).StoreBroadcastMessage(roundMsg); err != nil {
+		fmt.Println("verifyBroadcastMessage: error storing broadcast message")
 		return fmt.Errorf("round %d: %w", r.Number(), err)
 	}
+	// r now contains any updates made by broadcast message
+	// Update round / currentRound with changes made by message
+	h.Rounds[msg.RoundNumber] = r
+	if msg.RoundNumber == h.CurrentRound.Number() {
+		h.CurrentRound = r
+	}
 
-	// if the round only expected a broadcast message, we can safely return
+	// if the round only expected a Broadcast message, we can safely return
 	if !expectsNormalMessage(r) {
 		return nil
 	}
 
-	// otherwise, we can try to handle the p2p message that may be stored.
-	msg = h.messages[msg.RoundNumber][msg.From]
-	if msg == nil {
-		return nil
-	}
+	/*
+		// otherwise, we can try to handle the p2p message that may be stored.
+		msg = h.Messages[msg.RoundNumber][msg.From]
+		if msg == nil {
+			return nil
+		}
 
-	return h.verifyMessage(msg)
+		return h.verifyMessage(msg)
+	*/
+	return nil
 }
 
-// verifyMessage tries to handle a normal (non reliably broadcast) message for this current round.
+// verifyMessage tries to handle a normal (non reliably Broadcast) message for this current round.
 func (h *MultiHandler) verifyMessage(msg *Message) error {
 	// we simply return if we haven't reached the right round.
-	r, ok := h.rounds[msg.RoundNumber]
+	r, ok := h.Rounds[msg.RoundNumber]
 	if !ok {
+		fmt.Println("handler.verifyMessage: relevant round not found in h.Rounds")
 		return nil
 	}
 
-	// exit if we don't yet have the broadcast message
+	// exit if we don't yet have the Broadcast message
 	if _, ok = r.(round.BroadcastRound); ok {
-		q := h.broadcast[msg.RoundNumber]
+		q := h.Broadcast[msg.RoundNumber]
 		if q == nil || q[msg.From] == nil {
+			fmt.Println("handler.verifyMessage: waiting for the broadcast message first")
 			return nil
 		}
 	}
 
 	roundMsg, err := getRoundMessage(msg, r)
 	if err != nil {
+		fmt.Println("getRoundMessage (unmarshal raw message) failed in handler.verifyMessage")
 		return err
 	}
 
 	// verify message for round
 	if err = r.VerifyMessage(roundMsg); err != nil {
+		fmt.Println("verifyMessage for round failed in handler.verifyMessage")
 		return fmt.Errorf("round %d: %w", r.Number(), err)
 	}
 
 	if err = r.StoreMessage(roundMsg); err != nil {
+		fmt.Println("storeMessage for round failed in handler.verifyMessage")
 		return fmt.Errorf("round %d: %w", r.Number(), err)
 	}
 
 	return nil
 }
 
-func (h *MultiHandler) finalize() {
-	// only finalize if we have received all messages
-	if !h.receivedAll() {
-		return
-	}
-	if !h.checkBroadcastHash() {
-		h.abort(errors.New("broadcast verification failed"))
-		return
+// Add received messages to handler
+// Returns true if all messages received, otherwise returns false
+func (h *MultiHandler) AddReceivedMsgs(msgs []*Message) bool {
+	if len(msgs) == 0 || msgs[0] == nil {
+		return false
 	}
 
-	out := make(chan *round.Message, h.currentRound.N()+1)
-	// since we pass a large enough channel, we should never get an error
-	r, err := h.currentRound.Finalize(out)
-	close(out)
+	// If messages can be accepted to handler, do so
+	// This stores them in h.messages and h.Broadcast
+	// Side effects may (should) update the current round as necessary
+	for _, msg := range msgs {
+		if h.CanAccept(msg) {
+			h.Accept(msg)
+		}
+	}
+
+	return h.ReceivedAll()
+}
+
+// Processes the round using messages added via AddReceivedMsgs()
+// Returns a list of messages to Broadcast / send to peers
+// May update the roundNumber
+func (h *MultiHandler) ProcessRound() []*Message {
+	if !h.ReceivedAll() {
+		// Not ready to process round yet
+		fmt.Println(h.CurrentRound.SelfID(), "is not ready to process the round yet")
+		return nil
+	}
+	if !h.checkBroadcastHash() {
+		h.abort(errors.New("Broadcast verification failed"))
+		return nil
+	}
+	fmt.Printf("%+v is processing round %d\n", h.CurrentRound.SelfID(), h.CurrentRound.Number())
+	// Create slice to contain all messages to be sent for next round
+	out := make([]*round.Message, 0, h.CurrentRound.N()+1)
+	// Get Broadcast and direct messages and store in slice
+	// This calls Finalize() defined for each round
+	// Make sure it is not a recursive call!
+	r, out, err := h.CurrentRound.Finalize(out)
+
 	// either we got an error due to some problem on our end (sampling etc)
 	// or the new round is nil (should not happen)
 	if err != nil || r == nil {
-		h.abort(err, h.currentRound.SelfID())
-		return
+		fmt.Println("Some error happened or round was nil (should not happen):", err)
+		h.abort(err, h.CurrentRound.SelfID())
+		return nil
 	}
 
+	// Return here if we are done!
+	// either we get the current round, the next one, or one of the two final ones
+	switch R := r.(type) {
+	// An abort happened
+	case *round.Abort:
+		h.abort(R.Err, R.Culprits...)
+		fmt.Printf("Round was aborted; error %+v culprit %+v\n", R.Err, R.Culprits)
+		return nil
+	// We have the result
+	case *round.Output:
+		h.ResultObj = R.Result
+		h.abort(nil)
+		return nil
+	default:
+	}
+
+	// Update roundNumber and CurrentRound with new one
+	h.Rounds[r.Number()] = r
+	h.CurrentRound = r
+
 	// forward messages with the correct header.
-	for roundMsg := range out {
+	// First, clear the list of messages to be sent outbound
+	h.Out = nil
+	for _, roundMsg := range out {
+		// If slice is empty, exit loop
+		if roundMsg == nil {
+			break
+		}
 		data, err := cbor.Marshal(roundMsg.Content)
 		if err != nil {
 			panic(fmt.Errorf("failed to marshal round message: %w", err))
@@ -265,21 +369,71 @@ func (h *MultiHandler) finalize() {
 			RoundNumber:           roundMsg.Content.RoundNumber(),
 			Data:                  data,
 			Broadcast:             roundMsg.Broadcast,
-			BroadcastVerification: h.broadcastHashes[r.Number()-1],
+			BroadcastVerification: h.BroadcastHashes[r.Number()-1],
 		}
 		if msg.Broadcast {
 			h.store(msg)
 		}
-		h.out <- msg
+		h.Out = append(h.Out, msg)
+	}
+	return h.Out
+}
+
+func (h *MultiHandler) finalize() {
+	// only finalize if we have received all messages
+	if !h.ReceivedAll() {
+		return
+	}
+	if !h.checkBroadcastHash() {
+		h.abort(errors.New("Broadcast verification failed"))
+		return
+	}
+	fmt.Printf("%+v is finalizing round %d\n", h.CurrentRound.SelfID(), h.CurrentRound.Number())
+	out := make([]*round.Message, 0, h.CurrentRound.N()+1)
+	// since we pass a large enough channel, we should never get an error
+	r, out, err := h.CurrentRound.Finalize(out)
+	// close(out)
+	// either we got an error due to some problem on our end (sampling etc)
+	// or the new round is nil (should not happen)
+	if err != nil || r == nil {
+		fmt.Println("new round is nil (should not happen) in handler.finalize()")
+		h.abort(err, h.CurrentRound.SelfID())
+		return
+	}
+
+	// forward messages with the correct header.
+	for _, roundMsg := range out {
+		if roundMsg == nil {
+			break
+		}
+		fmt.Printf("%+v\n", roundMsg)
+		data, err := cbor.Marshal(roundMsg.Content)
+		if err != nil {
+			panic(fmt.Errorf("failed to marshal round message: %w", err))
+		}
+		msg := &Message{
+			SSID:                  r.SSID(),
+			From:                  r.SelfID(),
+			To:                    roundMsg.To,
+			Protocol:              r.ProtocolID(),
+			RoundNumber:           roundMsg.Content.RoundNumber(),
+			Data:                  data,
+			Broadcast:             roundMsg.Broadcast,
+			BroadcastVerification: h.BroadcastHashes[r.Number()-1],
+		}
+		if msg.Broadcast {
+			h.store(msg)
+		}
+		h.Out = append(h.Out, msg)
 	}
 
 	roundNumber := r.Number()
 	// if we get a round with the same number, we can safely assume that we got the same one.
-	if _, ok := h.rounds[roundNumber]; ok {
+	if _, ok := h.Rounds[roundNumber]; ok {
 		return
 	}
-	h.rounds[roundNumber] = r
-	h.currentRound = r
+	h.Rounds[roundNumber] = r
+	h.CurrentRound = r
 
 	// either we get the current round, the next one, or one of the two final ones
 	switch R := r.(type) {
@@ -289,32 +443,34 @@ func (h *MultiHandler) finalize() {
 		return
 	// We have the result
 	case *round.Output:
-		h.result = R.Result
+		h.ResultObj = R.Result
 		h.abort(nil)
 		return
 	default:
 	}
 
 	if _, ok := r.(round.BroadcastRound); ok {
-		// handle queued broadcast messages, which will then check the subsequent normal message
-		for id, m := range h.broadcast[roundNumber] {
+		// handle queued Broadcast messages, which will then check the subsequent normal message
+		for id, m := range h.Broadcast[roundNumber] {
 			if m == nil || id == r.SelfID() {
 				continue
 			}
 			// if false, we aborted and so we return
 			if err = h.verifyBroadcastMessage(m); err != nil {
+				fmt.Println("verifyBroadcastMessage failed in handler.finalize()")
 				h.abort(err, m.From)
 				return
 			}
 		}
 	} else {
 		// handle simple queued messages
-		for _, m := range h.messages[roundNumber] {
+		for _, m := range h.Messages[roundNumber] {
 			if m == nil {
 				continue
 			}
 			// if false, we aborted and so we return
 			if err = h.verifyMessage(m); err != nil {
+				fmt.Println("verifyMessage failed in handler.finalize()")
 				h.abort(err, m.From)
 				return
 			}
@@ -327,28 +483,23 @@ func (h *MultiHandler) finalize() {
 
 func (h *MultiHandler) abort(err error, culprits ...party.ID) {
 	if err != nil {
-		h.err = &Error{
+		h.Err = &Error{
 			Culprits: culprits,
 			Err:      err,
 		}
-		select {
-		case h.out <- &Message{
-			SSID:     h.currentRound.SSID(),
-			From:     h.currentRound.SelfID(),
-			Protocol: h.currentRound.ProtocolID(),
-			Data:     []byte(h.err.Error()),
-		}:
-		default:
-		}
-
+		h.Out = append(h.Out, &Message{
+			SSID:     h.CurrentRound.SSID(),
+			From:     h.CurrentRound.SelfID(),
+			Protocol: h.CurrentRound.ProtocolID(),
+			Data:     []byte(h.Err.Error()),
+		})
 	}
-	close(h.out)
 }
 
 // Stop cancels the current execution of the protocol, and alerts the other users.
 func (h *MultiHandler) Stop() {
-	if h.err != nil || h.result != nil {
-		h.abort(errors.New("aborted by user"), h.currentRound.SelfID())
+	if h.Err != nil || h.ResultObj != nil {
+		h.abort(errors.New("aborted by user"), h.CurrentRound.SelfID())
 	}
 }
 
@@ -356,42 +507,46 @@ func expectsNormalMessage(r round.Session) bool {
 	return r.MessageContent() != nil
 }
 
-func (h *MultiHandler) receivedAll() bool {
-	r := h.currentRound
+func (h *MultiHandler) ReceivedAll() bool {
+	r := h.CurrentRound
 	number := r.Number()
-	// check all broadcast messages
+	// check all Broadcast messages
 	if _, ok := r.(round.BroadcastRound); ok {
-		if h.broadcast[number] == nil {
+		if h.Broadcast[number] == nil {
+			// fmt.Println("Not a broadcast round; ReceivedAll() = true")
 			return true
 		}
 		for _, id := range r.PartyIDs() {
-			msg := h.broadcast[number][id]
+			msg := h.Broadcast[number][id]
 			if msg == nil {
+				// fmt.Println("Message from", id, "is missing, ReceivedAll() = false")
 				return false
 			}
 		}
 
 		// create hash of all message for this round
-		if h.broadcastHashes[number] == nil {
+		if h.BroadcastHashes[number] == nil {
 			hashState := r.Hash()
 			for _, id := range r.PartyIDs() {
-				msg := h.broadcast[number][id]
+				msg := h.Broadcast[number][id]
 				_ = hashState.WriteAny(&hash.BytesWithDomain{
 					TheDomain: "Message",
 					Bytes:     msg.Hash(),
 				})
 			}
-			h.broadcastHashes[number] = hashState.Sum()
+			h.BroadcastHashes[number] = hashState.Sum()
 		}
 	}
 
 	// check all normal messages
 	if expectsNormalMessage(r) {
-		if h.messages[number] == nil {
+		if h.Messages[number] == nil {
+			fmt.Println("List of messages is empty; ReceivedAll() = true")
 			return true
 		}
 		for _, id := range r.OtherPartyIDs() {
-			if h.messages[number][id] == nil {
+			if h.Messages[number][id] == nil {
+				fmt.Println("Message from", id, "is missing; ReceivedAll() = false")
 				return false
 			}
 		}
@@ -405,9 +560,9 @@ func (h *MultiHandler) duplicate(msg *Message) bool {
 	}
 	var q map[party.ID]*Message
 	if msg.Broadcast {
-		q = h.broadcast[msg.RoundNumber]
+		q = h.Broadcast[msg.RoundNumber]
 	} else {
-		q = h.messages[msg.RoundNumber]
+		q = h.Messages[msg.RoundNumber]
 	}
 	// technically, we already received the nil message since it is not expected :)
 	if q == nil {
@@ -417,16 +572,16 @@ func (h *MultiHandler) duplicate(msg *Message) bool {
 }
 
 func (h *MultiHandler) store(msg *Message) {
-	var q map[party.ID]*Message
-	if msg.Broadcast {
-		q = h.broadcast[msg.RoundNumber]
-	} else {
-		q = h.messages[msg.RoundNumber]
-	}
-	if q == nil || q[msg.From] != nil {
+	if msg == nil {
 		return
 	}
-	q[msg.From] = msg
+	if msg.Broadcast {
+		h.Broadcast[msg.RoundNumber][msg.From] = msg
+		return
+	} else {
+		h.Messages[msg.RoundNumber][msg.From] = msg
+		return
+	}
 }
 
 // getRoundMessage attempts to unmarshal a raw Message for round `r` in a round.Message.
@@ -438,7 +593,7 @@ func getRoundMessage(msg *Message, r round.Session) (round.Message, error) {
 	if msg.Broadcast {
 		b, ok := r.(round.BroadcastRound)
 		if !ok {
-			return round.Message{}, errors.New("got broadcast message when none was expected")
+			return round.Message{}, errors.New("got Broadcast message when none was expected")
 		}
 		content = b.BroadcastContent()
 	} else {
@@ -449,6 +604,8 @@ func getRoundMessage(msg *Message, r round.Session) (round.Message, error) {
 	if err := cbor.Unmarshal(msg.Data, content); err != nil {
 		return round.Message{}, fmt.Errorf("failed to unmarshal: %w", err)
 	}
+	//fmt.Printf("getRoundMessage() was passed this msg.Data: %+v\n", msg.Data)
+	//fmt.Printf("getRoundMessage() returned this content: %+v\n", content)
 	roundMsg := round.Message{
 		From:      msg.From,
 		To:        msg.To,
@@ -458,22 +615,24 @@ func getRoundMessage(msg *Message, r round.Session) (round.Message, error) {
 	return roundMsg, nil
 }
 
-// checkBroadcastHash is run after receivedAll() and checks whether all provided verification hashes are correct.
+// checkBroadcastHash is run after ReceivedAll() and checks whether all provided verification hashes are correct.
 func (h *MultiHandler) checkBroadcastHash() bool {
-	number := h.currentRound.Number()
+	number := h.CurrentRound.Number()
 	// check BroadcastVerification
-	previousHash := h.broadcastHashes[number-1]
+	previousHash := h.BroadcastHashes[number-1]
 	if previousHash == nil {
 		return true
 	}
 
-	for _, msg := range h.messages[number] {
+	for _, msg := range h.Messages[number] {
 		if msg != nil && !bytes.Equal(previousHash, msg.BroadcastVerification) {
+			fmt.Println("BroadcastHash is incorrect")
 			return false
 		}
 	}
-	for _, msg := range h.broadcast[number] {
+	for _, msg := range h.Broadcast[number] {
 		if msg != nil && !bytes.Equal(previousHash, msg.BroadcastVerification) {
+			fmt.Println("BroadcastHash is incorrect")
 			return false
 		}
 	}
@@ -493,5 +652,18 @@ func newQueue(senders []party.ID, rounds round.Number) map[round.Number]map[part
 }
 
 func (h *MultiHandler) String() string {
-	return fmt.Sprintf("party: %s, protocol: %s", h.currentRound.SelfID(), h.currentRound.ProtocolID())
+	return fmt.Sprintf("party: %s, protocol: %s", h.CurrentRound.SelfID(), h.CurrentRound.ProtocolID())
+}
+
+func (h *MultiHandler) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"CurrentRound":    h.CurrentRound,
+		"Rounds":          h.Rounds,
+		"Err":             h.Err,
+		"ResultObj":       h.ResultObj,
+		"Messages":        h.Messages,
+		"Broadcast":       h.Broadcast,
+		"BroadcastHashes": h.BroadcastHashes,
+		"Out":             h.Out,
+	})
 }

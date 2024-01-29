@@ -2,6 +2,8 @@ package zksch
 
 import (
 	"crypto/rand"
+	"encoding/json"
+	"fmt"
 	"io"
 
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
@@ -11,8 +13,8 @@ import (
 
 // Randomness = a ← ℤₚ.
 type Randomness struct {
-	a          curve.Scalar
-	commitment Commitment
+	A           curve.Scalar
+	CommitmentC Commitment
 }
 
 // Commitment = randomness•G, where
@@ -51,9 +53,13 @@ func NewRandomness(rand io.Reader, group curve.Curve, gen curve.Point) *Randomne
 	}
 	a := sample.Scalar(rand, group)
 	return &Randomness{
-		a:          a,
-		commitment: Commitment{C: a.Act(gen)},
+		A:           a,
+		CommitmentC: Commitment{C: a.Act(gen)},
 	}
+}
+
+func ImportRandomness(a curve.Scalar, c Commitment) Randomness {
+	return Randomness{a, c}
 }
 
 func challenge(hash *hash.Hash, group curve.Curve, commitment *Commitment, public, gen curve.Point) (e curve.Scalar, err error) {
@@ -71,18 +77,80 @@ func (r *Randomness) Prove(hash *hash.Hash, public curve.Point, secret curve.Sca
 		return nil
 	}
 	group := secret.Curve()
-	e, err := challenge(hash, group, &r.commitment, public, gen)
+	e, err := challenge(hash, group, &r.CommitmentC, public, gen)
 	if err != nil {
 		return nil
 	}
 	es := e.Mul(secret)
-	z := es.Add(r.a)
+	z := es.Add(r.A)
 	return &Response{group: group, Z: z}
 }
 
 // Commitment returns the commitment C = a•G for the randomness a.
 func (r *Randomness) Commitment() *Commitment {
-	return &r.commitment
+	return &r.CommitmentC
+}
+
+func (r *Randomness) MarshalJSON() ([]byte, error) {
+	json, e := json.Marshal(map[string]interface{}{
+		"A":           r.A,
+		"CommitmentC": r.CommitmentC,
+	})
+	if e != nil {
+		fmt.Println(e)
+		return nil, e
+	}
+	return json, e
+}
+
+func (r *Randomness) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if err := json.Unmarshal(j, &tmp); err != nil {
+		fmt.Println("zk/sch randomness unmarshaljson failure @ tmp:", err)
+		return err
+	}
+	var a = curve.Secp256k1Scalar{}
+	if err := json.Unmarshal(tmp["A"], &a); err != nil {
+		fmt.Println("zk/sch randomness unmarshaljson failure @ a", err)
+		return err
+	}
+	r.A = &a
+
+	var c = Commitment{}
+	if err := json.Unmarshal(tmp["CommitmentC"], &c); err != nil {
+		fmt.Println("zk/sch randomness unmarshaljson failure: @ c", err)
+		return err
+	}
+	r.CommitmentC.C = c.C
+	return nil
+}
+
+func (c Commitment) MarshalJSON() ([]byte, error) {
+	j, e := json.Marshal(map[string]interface{}{
+		"C": c.C,
+	})
+	if e != nil {
+		fmt.Println("marshal commitment failure:", e)
+		return nil, e
+	}
+	return j, nil
+}
+
+func (c *Commitment) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("Failed to UnmarshalJSON commitment @ tmp:", e)
+		return e
+	}
+
+	var bigC *curve.Secp256k1Point
+	if e := json.Unmarshal(tmp["C"], &bigC); e != nil {
+		fmt.Println("Failed to UnmarshalJSON commitment @ bigC (com):", e)
+		return e
+	}
+
+	c.C = bigC
+	return nil
 }
 
 // Verify checks that Response•G = Commitment + H(..., Commitment, public)•Public.

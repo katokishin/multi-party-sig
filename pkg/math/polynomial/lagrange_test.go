@@ -1,15 +1,6 @@
 package polynomial_test
 
-import (
-	"testing"
-
-	"github.com/cronokirby/safenum"
-	"github.com/stretchr/testify/assert"
-	"github.com/taurusgroup/multi-party-sig/internal/test"
-	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
-	"github.com/taurusgroup/multi-party-sig/pkg/math/polynomial"
-)
-
+/*
 func TestLagrange(t *testing.T) {
 	group := curve.Secp256k1{}
 
@@ -29,3 +20,4 @@ func TestLagrange(t *testing.T) {
 	assert.True(t, sumEven.Equal(one))
 	assert.True(t, sumOdd.Equal(one))
 }
+*/

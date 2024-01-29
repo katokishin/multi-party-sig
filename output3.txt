@@ -1,0 +1,80 @@
+alice is processing round 1
+bob is processing round 1
+charlie is processing round 1
+=======================
+It's a Kround1!
+It's a Kround2!
+alice is processing round 2
+=======================
+It's a Kround1!
+It's a Kround2!
+bob is processing round 2
+=======================
+It's a Kround1!
+It's a Kround2!
+charlie is processing round 2
+=======================
+It's a Kround1!
+It's a Kround2!
+It's a Kround3!
+alice is processing round 3
+=======================
+It's a Kround1!
+It's a Kround2!
+It's a Kround3!
+bob is processing round 3
+=======================
+It's a Kround1!
+It's a Kround2!
+It's a Kround3!
+charlie is processing round 3
+=======================
+It's a Kround1!
+It's a Kround2!
+It's a Kround3!
+It's a Kround4!
+Kr4 storeMessage(): Failed to validate VSS share from bob
+storeMessage for round failed in handler.verifyMessage
+verifyMessage failed in handler.Accept(); message: message: round 4, from: bob, to alice, protocol: cmp/keygen-threshold
+Kr4 storeMessage(): Failed to validate VSS share from charlie
+storeMessage for round failed in handler.verifyMessage
+verifyMessage failed in handler.Accept(); message: message: round 4, from: charlie, to alice, protocol: cmp/keygen-threshold
+alice is processing round 4
+Some error happened or round was nil (should not happen): Missing a ShareReceived[j] for party bob
+
+=======================
+It's a Kround1!
+It's a Kround2!
+It's a Kround3!
+It's a Kround4!
+Kr4 storeMessage(): Failed to validate VSS share from alice
+storeMessage for round failed in handler.verifyMessage
+verifyMessage failed in handler.Accept(); message: message: round 4, from: alice, to bob, protocol: cmp/keygen-threshold
+Kr4 storeMessage(): Failed to validate VSS share from charlie
+storeMessage for round failed in handler.verifyMessage
+verifyMessage failed in handler.Accept(); message: message: round 4, from: charlie, to bob, protocol: cmp/keygen-threshold
+bob is processing round 4
+Some error happened or round was nil (should not happen): Missing a ShareReceived[j] for party alice
+
+=======================
+It's a Kround1!
+It's a Kround2!
+It's a Kround3!
+It's a Kround4!
+Kr4 storeMessage(): Failed to validate VSS share from alice
+storeMessage for round failed in handler.verifyMessage
+verifyMessage failed in handler.Accept(); message: message: round 4, from: alice, to charlie, protocol: cmp/keygen-threshold
+Kr4 storeMessage(): Failed to validate VSS share from bob
+storeMessage for round failed in handler.verifyMessage
+verifyMessage failed in handler.Accept(); message: message: round 4, from: bob, to charlie, protocol: cmp/keygen-threshold
+charlie is processing round 4
+Some error happened or round was nil (should not happen): Missing a ShareReceived[j] for party alice
+
+=======================
+It's a Kround1!
+It's a Kround2!
+It's a Kround3!
+It's a Kround4!
+[123 34 67 117 108 112 114 105 116 115 34 58 91 34 97 108 105 99 101 34 93 44 34 69 114 114 34 58 123 125 125]
+Error unmarshalling e json: cannot unmarshal object into Go struct field Error.Err of type error
+JSON Unmarshal Error getting Handler: json: cannot unmarshal object into Go struct field Error.Err of type error

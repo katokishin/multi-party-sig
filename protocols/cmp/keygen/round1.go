@@ -2,9 +2,12 @@ package keygen
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/cronokirby/safenum"
+	"github.com/taurusgroup/multi-party-sig/internal/jsontools"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/internal/types"
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
@@ -16,9 +19,9 @@ import (
 	zksch "github.com/taurusgroup/multi-party-sig/pkg/zk/sch"
 )
 
-var _ round.Round = (*round1)(nil)
+var _ round.Round = (*Kround1)(nil)
 
-type round1 struct {
+type Kround1 struct {
 	*round.Helper
 
 	// PreviousSecretECDSA = sk'ᵢ
@@ -45,10 +48,10 @@ type round1 struct {
 }
 
 // VerifyMessage implements round.Round.
-func (r *round1) VerifyMessage(round.Message) error { return nil }
+func (r *Kround1) VerifyMessage(round.Message) error { return nil }
 
 // StoreMessage implements round.Round.
-func (r *round1) StoreMessage(round.Message) error { return nil }
+func (r *Kround1) StoreMessage(round.Message) error { return nil }
 
 // Finalize implements round.Round
 //
@@ -60,7 +63,7 @@ func (r *round1) StoreMessage(round.Message) error { return nil }
 // - sample ridᵢ <- {0,1}ᵏ
 // - sample cᵢ <- {0,1}ᵏ
 // - commit to message.
-func (r *round1) Finalize(out chan<- *round.Message) (round.Session, error) {
+func (r *Kround1) Finalize(out []*round.Message) (round.Session, []*round.Message, error) {
 	// generate Paillier and Pedersen
 	PaillierSecret := paillier.NewSecretKey(nil)
 	SelfPaillierPublic := PaillierSecret.PublicKey
@@ -80,11 +83,11 @@ func (r *round1) Finalize(out chan<- *round.Message) (round.Session, error) {
 	// Sample RIDᵢ
 	SelfRID, err := types.NewRID(rand.Reader)
 	if err != nil {
-		return r, errors.New("failed to sample Rho")
+		return r, nil, errors.New("failed to sample Rho")
 	}
 	chainKey, err := types.NewRID(rand.Reader)
 	if err != nil {
-		return r, errors.New("failed to sample c")
+		return r, nil, errors.New("failed to sample c")
 	}
 
 	// commit to data in message 2
@@ -92,18 +95,15 @@ func (r *round1) Finalize(out chan<- *round.Message) (round.Session, error) {
 		SelfRID, chainKey, SelfVSSPolynomial, SchnorrRand.Commitment(), ElGamalPublic,
 		SelfPedersenPublic.N(), SelfPedersenPublic.S(), SelfPedersenPublic.T())
 	if err != nil {
-		return r, errors.New("failed to commit")
+		return r, nil, errors.New("failed to commit")
 	}
 
 	// should be broadcast but we don't need that here
-	msg := &broadcast2{Commitment: SelfCommitment}
-	err = r.BroadcastMessage(out, msg)
-	if err != nil {
-		return r, err
-	}
+	msg := &Broadcast2{Commitment: SelfCommitment}
+	out = r.BroadcastMessage(out, msg)
 
-	nextRound := &round2{
-		round1:         r,
+	nextRound := &Kround2{
+		Kround1:        r,
 		VSSPolynomials: map[party.ID]*polynomial.Exponent{r.SelfID(): SelfVSSPolynomial},
 		Commitments:    map[party.ID]hash.Commitment{r.SelfID(): SelfCommitment},
 		RIDs:           map[party.ID]types.RID{r.SelfID(): SelfRID},
@@ -120,14 +120,60 @@ func (r *round1) Finalize(out chan<- *round.Message) (round.Session, error) {
 		SchnorrRand:    SchnorrRand,
 		Decommitment:   Decommitment,
 	}
-	return nextRound, nil
+	return nextRound, out, nil
 }
 
 // PreviousRound implements round.Round.
-func (round1) PreviousRound() round.Round { return nil }
+func (Kround1) PreviousRound() round.Round { return nil }
 
 // MessageContent implements round.Round.
-func (round1) MessageContent() round.Content { return nil }
+func (Kround1) MessageContent() round.Content { return nil }
 
 // Number implements round.Round.
-func (round1) Number() round.Number { return 1 }
+func (Kround1) Number() round.Number { return 1 }
+
+func (r *Kround1) MarshalJSON() ([]byte, error) {
+	h, e := r.Helper.MarshalJSON()
+	if e != nil {
+		fmt.Println(e)
+		return nil, e
+	}
+	r1, e := json.Marshal(map[string]interface{}{
+		"VSSSecret": r.VSSSecret,
+	})
+	if e != nil {
+		fmt.Println(e)
+		return nil, e
+	}
+	return jsontools.JoinJSON(r1, h)
+}
+
+func (r *Kround1) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if err := json.Unmarshal(j, &tmp); err != nil {
+		fmt.Println("kr1 unmarshal failed @ tmp:", err)
+		return err
+	}
+
+	var vsss *polynomial.Polynomial
+	if err := json.Unmarshal(tmp["VSSSecret"], &vsss); err != nil {
+		fmt.Println("kr1 unmarshal failed @ vsss:", err)
+		return err
+	}
+
+	var h *round.Helper
+	if err := json.Unmarshal(j, &h); err != nil {
+		fmt.Println("kr1 unmarshal failed @ h:", err)
+		return err
+	}
+	r.Helper = h
+
+	r.Info = h.Info
+	r.Pool = h.Pool
+	r.OtherPartyIDsSlice = h.OtherPartyIDsSlice
+	r.PartyIDsSlice = h.PartyIDsSlice
+	r.Ssid = h.Ssid
+
+	r.VSSSecret = vsss
+	return nil
+}

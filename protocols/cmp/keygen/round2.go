@@ -1,7 +1,12 @@
 package keygen
 
 import (
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+
 	"github.com/cronokirby/safenum"
+	"github.com/taurusgroup/multi-party-sig/internal/jsontools"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/internal/types"
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
@@ -12,10 +17,10 @@ import (
 	zksch "github.com/taurusgroup/multi-party-sig/pkg/zk/sch"
 )
 
-var _ round.Round = (*round2)(nil)
+var _ round.Round = (*Kround2)(nil)
 
-type round2 struct {
-	*round1
+type Kround2 struct {
+	*Kround1
 
 	// VSSPolynomials[j] = Fⱼ(X) = fⱼ(X)•G
 	VSSPolynomials map[party.ID]*polynomial.Exponent
@@ -58,7 +63,7 @@ type round2 struct {
 	Decommitment hash.Decommitment // uᵢ
 }
 
-type broadcast2 struct {
+type Broadcast2 struct {
 	round.ReliableBroadcastContent
 	// Commitment = Vᵢ = H(ρᵢ, Fᵢ(X), Aᵢ, Yᵢ, Nᵢ, sᵢ, tᵢ, uᵢ)
 	Commitment hash.Commitment
@@ -66,8 +71,8 @@ type broadcast2 struct {
 
 // StoreBroadcastMessage implements round.BroadcastRound.
 // - save commitment Vⱼ.
-func (r *round2) StoreBroadcastMessage(msg round.Message) error {
-	body, ok := msg.Content.(*broadcast2)
+func (r *Kround2) StoreBroadcastMessage(msg round.Message) error {
+	body, ok := msg.Content.(*Broadcast2)
 	if !ok || body == nil {
 		return round.ErrInvalidContent
 	}
@@ -79,17 +84,17 @@ func (r *round2) StoreBroadcastMessage(msg round.Message) error {
 }
 
 // VerifyMessage implements round.Round.
-func (round2) VerifyMessage(round.Message) error { return nil }
+func (Kround2) VerifyMessage(round.Message) error { return nil }
 
 // StoreMessage implements round.Round.
-func (round2) StoreMessage(round.Message) error { return nil }
+func (Kround2) StoreMessage(round.Message) error { return nil }
 
 // Finalize implements round.Round
 //
 // - send all committed data.
-func (r *round2) Finalize(out chan<- *round.Message) (round.Session, error) {
+func (r *Kround2) Finalize(out []*round.Message) (round.Session, []*round.Message, error) {
 	// Send the message we created in Round1 to all
-	err := r.BroadcastMessage(out, &broadcast3{
+	out = r.BroadcastMessage(out, &Broadcast3{
 		RID:                r.RIDs[r.SelfID()],
 		C:                  r.ChainKeys[r.SelfID()],
 		VSSPolynomial:      r.VSSPolynomials[r.SelfID()],
@@ -100,26 +105,278 @@ func (r *round2) Finalize(out chan<- *round.Message) (round.Session, error) {
 		T:                  r.T[r.SelfID()],
 		Decommitment:       r.Decommitment,
 	})
-	if err != nil {
-		return r, err
-	}
-	return &round3{
-		round2:             r,
+	return &Kround3{
+		Kround2:            r,
 		SchnorrCommitments: map[party.ID]*zksch.Commitment{},
-	}, nil
+	}, out, nil
 }
 
 // PreviousRound implements round.Round.
-func (r *round2) PreviousRound() round.Round { return r.round1 }
+func (r *Kround2) PreviousRound() round.Round { return r.Kround1 }
 
 // MessageContent implements round.Round.
-func (round2) MessageContent() round.Content { return nil }
+func (Kround2) MessageContent() round.Content { return nil }
 
 // RoundNumber implements round.Content.
-func (broadcast2) RoundNumber() round.Number { return 2 }
+func (Broadcast2) RoundNumber() round.Number { return 2 }
 
 // BroadcastContent implements round.BroadcastRound.
-func (round2) BroadcastContent() round.BroadcastContent { return &broadcast2{} }
+func (Kround2) BroadcastContent() round.BroadcastContent { return &Broadcast2{} }
 
 // Number implements round.Round.
-func (round2) Number() round.Number { return 2 }
+func (Kround2) Number() round.Number { return 2 }
+
+func (r Kround2) MarshalJSON() ([]byte, error) {
+	nmods := make(map[party.ID][]byte)
+	for id, nmod := range r.NModulus {
+		nmods[id] = nmod.Bytes()
+	}
+	ss := make(map[party.ID][]byte)
+	for id, s := range r.S {
+		ss[id] = s.Bytes()
+	}
+	ts := make(map[party.ID][]byte)
+	for id, t := range r.T {
+		ts[id] = t.Bytes()
+	}
+	cs := make(map[party.ID]string)
+	for id, c := range r.Commitments {
+		str := base64.StdEncoding.EncodeToString(c)
+		cs[id] = str
+	}
+
+	mr2, e := json.Marshal(map[string]interface{}{
+		"VSSPolynomials": r.VSSPolynomials,
+		"Commitments":    cs,
+		"RIDs":           r.RIDs,
+		"ChainKeys":      r.ChainKeys,
+		"ShareReceived":  r.ShareReceived,
+		"ElGamalPublic":  r.ElGamalPublic,
+		"PaillierPublic": r.PaillierPublic,
+		"NModulus":       nmods,
+		"S":              ss,
+		"T":              ts,
+		"ElGamalSecret":  r.ElGamalSecret,
+		"PaillierSecret": r.PaillierSecret,
+		"PedersenSecret": r.PedersenSecret.Bytes(),
+		"SchnorrRand":    r.SchnorrRand,
+		"Decommitment":   r.Decommitment,
+	})
+	if e != nil {
+		fmt.Println(e)
+		return nil, e
+	}
+	r1, e := json.Marshal(r.Kround1)
+	if e != nil {
+		fmt.Println(e)
+		return nil, e
+	}
+	return jsontools.JoinJSON(mr2, r1)
+}
+
+func (r *Kround2) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if err := json.Unmarshal(j, &tmp); err != nil {
+		fmt.Println("kr2 unmarshal failed @ tmp:", err)
+		return err
+	}
+
+	var r1 *Kround1
+	if err := json.Unmarshal(j, &r1); err != nil {
+		fmt.Println("kr2 unmarshal failed @ kr1:", err)
+		return err
+	}
+	r.Kround1 = r1
+
+	vsspoly := make(map[party.ID]*polynomial.Exponent)
+	polys := make(map[party.ID]json.RawMessage)
+	if err := json.Unmarshal(tmp["VSSPolynomials"], &polys); err != nil {
+		fmt.Println("kr2 unmarshal failed @ polys:", err)
+		return err
+	}
+	for i, p := range polys {
+		vsspoly[i] = polynomial.EmptyExponent(curve.Secp256k1{})
+		if err := json.Unmarshal(p, vsspoly[i]); err != nil {
+			fmt.Println("kr2 unmarshal failed @ vsspoly[i]:", err)
+			return err
+		}
+	}
+	r.VSSPolynomials = vsspoly
+
+	cmtmts := make(map[party.ID]hash.Commitment)
+	cs := make(map[party.ID]string)
+	if err := json.Unmarshal(tmp["Commitments"], &cs); err != nil {
+		fmt.Println("kr2 unmarshal failed @ cs:", err)
+		return err
+	}
+	for id, c := range cs {
+		str, e := base64.StdEncoding.DecodeString(c)
+		if e != nil {
+			return e
+		}
+		cmtmts[id] = str
+	}
+	r.Commitments = cmtmts
+
+	rids := make(map[party.ID]types.RID)
+	if err := json.Unmarshal(tmp["RIDs"], &rids); err != nil {
+		fmt.Println("kr2 unmarshal failed @ rids:", err)
+		return err
+	}
+	r.RIDs = rids
+
+	ckeys := make(map[party.ID]types.RID)
+	if err := json.Unmarshal(tmp["ChainKeys"], &ckeys); err != nil {
+		fmt.Println("kr2 unmarshal failed @ ckeys:", err)
+		return err
+	}
+	r.ChainKeys = ckeys
+
+	shreceived := make(map[party.ID]json.RawMessage)
+	shares := make(map[party.ID]curve.Scalar)
+	if err := json.Unmarshal(tmp["ShareReceived"], &shreceived); err != nil {
+		fmt.Println("kr2 unmarshal failed @ shreceived:", err)
+		return err
+	}
+	for k, sh := range shreceived {
+		shares[k] = &curve.Secp256k1Scalar{}
+		e := shares[k].UnmarshalJSON(sh)
+		if e != nil {
+			fmt.Println("kr2 unmarshal failed @ shreceived range:", e)
+			return e
+		}
+	}
+	r.ShareReceived = shares
+
+	elgmlstrings := make(map[party.ID]json.RawMessage)
+	elgmlpub := make(map[party.ID]curve.Point)
+	if err := json.Unmarshal(tmp["ElGamalPublic"], &elgmlstrings); err != nil {
+		fmt.Println("kr2 unmarshal failed @ elgmlstrings:", err)
+		return err
+	}
+	for k, elg := range elgmlstrings {
+		elgmlpub[k] = &curve.Secp256k1Point{}
+		e := elgmlpub[k].UnmarshalJSON(elg)
+		if e != nil {
+			fmt.Println("kr2 unmarshal failed @ elgmlstrings range:", e)
+		}
+	}
+	r.ElGamalPublic = elgmlpub
+
+	paillierpub := make(map[party.ID]*paillier.PublicKey)
+	paillierparties := make(map[party.ID]json.RawMessage)
+	if err := json.Unmarshal(tmp["PaillierPublic"], &paillierparties); err != nil {
+		fmt.Println("kr2 unmarshal failed @ paillierparties:", err)
+		return err
+	}
+	for party, jsn := range paillierparties {
+		var pub *paillier.PublicKey
+		if err := json.Unmarshal(jsn, &pub); err != nil {
+			fmt.Println("kr2 unmarshal failed @ pub:", err)
+			return err
+		}
+		paillierpub[party] = pub
+	}
+	r.PaillierPublic = paillierpub
+
+	nmod := make(map[party.ID]*safenum.Modulus)
+	nmodBytes := make(map[party.ID][]byte)
+	if err := json.Unmarshal(tmp["NModulus"], &nmodBytes); err != nil {
+		fmt.Println("kr2 unmarshal failed @ nmod:", err)
+		return err
+	}
+	for k, nm := range nmodBytes {
+		nm := nm
+		nmod[k] = safenum.ModulusFromBytes(nm)
+	}
+	r.NModulus = nmod
+
+	s := make(map[party.ID]*safenum.Nat)
+	t := make(map[party.ID]*safenum.Nat)
+	sBytes := make(map[party.ID][]byte)
+	tBytes := make(map[party.ID][]byte)
+	if err := json.Unmarshal(tmp["S"], &sBytes); err != nil {
+		fmt.Println("kr2 unmarshal failed @ s:", err)
+		return err
+	}
+	if err := json.Unmarshal(tmp["T"], &tBytes); err != nil {
+		fmt.Println("kr2 unmarshal failed @ t:", err)
+		return err
+	}
+	for k, sb := range sBytes {
+		sb := sb
+		nat := &safenum.Nat{}
+		s[k] = nat.SetBytes(sb)
+	}
+	for k, tb := range tBytes {
+		tb := tb
+		nat := &safenum.Nat{}
+		t[k] = nat.SetBytes(tb)
+	}
+	r.S = s
+	r.T = t
+
+	var elgmlsecret curve.Secp256k1Scalar
+	if err := json.Unmarshal(tmp["ElGamalSecret"], &elgmlsecret); err != nil {
+		fmt.Println("kr2 unmarshal failed @ elgmlsecret:", err)
+		return err
+	}
+	r.ElGamalSecret = &elgmlsecret
+
+	var pailliersecret *paillier.SecretKey
+	if err := json.Unmarshal(tmp["PaillierSecret"], &pailliersecret); err != nil {
+		fmt.Println("kr2 unmarshal failed @ pailliersecret:", err)
+		return err
+	}
+	r.PaillierSecret = pailliersecret
+
+	var pedersensecret *safenum.Nat
+	var pedersensecretBytes []byte
+	if err := json.Unmarshal(tmp["PedersenSecret"], &pedersensecretBytes); err != nil {
+		fmt.Println("kr2 unmarshal failed @ pedersensecret:", err)
+		return err
+	}
+	pedersensecret = &safenum.Nat{}
+	pedersensecret.SetBytes(pedersensecretBytes)
+	r.PedersenSecret = pedersensecret
+
+	var schnorrrand = &zksch.Randomness{}
+	if err := schnorrrand.UnmarshalJSON(tmp["SchnorrRand"]); err != nil {
+		fmt.Println("kr2 unmarshal failed @ schnorrand:", err)
+		return err
+	}
+	r.SchnorrRand = schnorrrand
+
+	var decommitment hash.Decommitment
+	if err := json.Unmarshal(tmp["Decommitment"], &decommitment); err != nil {
+		fmt.Println("kr2 unmarshal failed @ decommitment:", err)
+		return err
+	}
+	r.Decommitment = decommitment
+
+	return nil
+}
+
+func (b Broadcast2) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"Commitment": b.Commitment,
+	})
+}
+
+func (b *Broadcast2) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("Failed to unmarshal Broadcast2 @ tmp:", e)
+		return e
+	}
+
+	var hc []byte
+	if e := json.Unmarshal(tmp["Commitment"], &hc); e != nil {
+		fmt.Println("Failed to unmarshal Broadcast2 @ hc:", e)
+		return e
+	}
+	b = &Broadcast2{
+		Commitment: hc,
+	}
+	return nil
+}

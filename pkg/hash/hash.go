@@ -2,6 +2,7 @@ package hash
 
 import (
 	"encoding"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -19,13 +20,13 @@ const DigestLengthBytes = params.SecBytes * 2 // 64
 // Internally, this is a wrapper around sha3.ShakeHash, but any hash function with
 // an easily extendable output would work as well.
 type Hash struct {
-	h *blake3.Hasher
+	H *blake3.Hasher
 }
 
 // New creates a Hash struct where the internal hash function is initialized with "CMP-BLAKE".
 func New(initialData ...WriterToWithDomain) *Hash {
-	hash := &Hash{h: blake3.New()}
-	_, _ = hash.h.WriteString("CMP-BLAKE")
+	hash := &Hash{H: blake3.New()}
+	_, _ = hash.H.WriteString("CMP-BLAKE")
 	for _, d := range initialData {
 		_ = hash.WriteAny(d)
 	}
@@ -37,7 +38,7 @@ func New(initialData ...WriterToWithDomain) *Hash {
 // This finalizes the current state of the hash, and returns what's
 // essentially a stream of random bytes.
 func (hash *Hash) Digest() io.Reader {
-	return hash.h.Digest()
+	return hash.H.Digest()
 }
 
 // Sum returns a slice of length DigestLengthBytes resulting from the current hash state.
@@ -54,11 +55,11 @@ func (hash *Hash) Sum() []byte {
 //
 // Currently supported types:
 //
-//  - []byte
-//  - *safenum.Nat
-//  - *safenum.Int
-//  - *safenum.Modulus
-//  - hash.WriterToWithDomain
+//   - []byte
+//   - *safenum.Nat
+//   - *safenum.Int
+//   - *safenum.Modulus
+//   - hash.WriterToWithDomain
 //
 // This function will apply its own domain separation for the first two types.
 // The last type already suggests which domain to use, and this function respects it.
@@ -95,10 +96,10 @@ func (hash *Hash) WriteAny(data ...interface{}) error {
 
 		// Write out `(<domain><data>)`, so that each domain separated piece of data
 		// is distinguished from others.
-		_, _ = hash.h.WriteString("(")
-		_, _ = hash.h.WriteString(toBeWritten.Domain())
-		_, err := toBeWritten.WriteTo(hash.h)
-		_, _ = hash.h.WriteString(")")
+		_, _ = hash.H.WriteString("(")
+		_, _ = hash.H.WriteString(toBeWritten.Domain())
+		_, err := toBeWritten.WriteTo(hash.H)
+		_, _ = hash.H.WriteString(")")
 		if err != nil {
 			return fmt.Errorf("hash.WriteAny: %s: %w", toBeWritten.Domain(), err)
 		}
@@ -108,7 +109,7 @@ func (hash *Hash) WriteAny(data ...interface{}) error {
 
 // Clone returns a copy of the Hash in its current state.
 func (hash *Hash) Clone() *Hash {
-	return &Hash{h: hash.h.Clone()}
+	return &Hash{H: hash.H.Clone()}
 }
 
 // Fork clones this hash, and then writes some data.
@@ -116,4 +117,31 @@ func (hash *Hash) Fork(data ...interface{}) *Hash {
 	newHash := hash.Clone()
 	_ = newHash.WriteAny(data...)
 	return newHash
+}
+
+func (hash *Hash) MarshalJSON() ([]byte, error) {
+	// fmt.Printf("Marshaling hash: %+v\n", hash.H)
+	return json.Marshal(map[string]interface{}{
+		"H": &hash.H,
+	})
+}
+
+func (hash *Hash) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	e := json.Unmarshal(j, &tmp)
+	if e != nil {
+		fmt.Println(e)
+		return e
+	}
+
+	var h *blake3.Hasher
+	e = json.Unmarshal(tmp["H"], &h)
+	if e != nil {
+		fmt.Println(e)
+		return e
+	}
+	// fmt.Printf("Unmarshaled hash: %+v\n", h.H.Buf)
+
+	hash.H = h
+	return nil
 }

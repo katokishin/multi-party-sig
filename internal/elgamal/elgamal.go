@@ -2,6 +2,7 @@ package elgamal
 
 import (
 	"crypto/rand"
+	"encoding/json"
 	"io"
 
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
@@ -77,4 +78,11 @@ func (c *Ciphertext) WriteTo(w io.Writer) (int64, error) {
 
 func (Ciphertext) Domain() string {
 	return "ElGamal Ciphertext"
+}
+
+func (c Ciphertext) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"L": c.L,
+		"M": c.M,
+	})
 }

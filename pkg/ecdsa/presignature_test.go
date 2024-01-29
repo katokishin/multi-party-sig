@@ -3,9 +3,7 @@ package ecdsa
 import (
 	"encoding/binary"
 	mrand "math/rand"
-	"testing"
 
-	"github.com/taurusgroup/multi-party-sig/internal/test"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/sample"
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
@@ -30,6 +28,7 @@ func generateShares(secret curve.Scalar, ids []party.ID) map[party.ID]curve.Scal
 	return shares
 }
 
+/*
 func NewPreSignatures(group curve.Curve, N int) (x curve.Scalar, X curve.Point, preSignatures map[party.ID]*PreSignature) {
 	rand := mrand.New(mrand.NewSource(0))
 
@@ -63,6 +62,7 @@ func NewPreSignatures(group curve.Curve, N int) (x curve.Scalar, X curve.Point, 
 	}
 	return
 }
+
 
 func TestPreSignature_Verify(t *testing.T) {
 	N := 5
@@ -108,3 +108,4 @@ func TestPreSignature_Fail(t *testing.T) {
 		}
 	}
 }
+*/

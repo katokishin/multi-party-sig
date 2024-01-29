@@ -1,10 +1,13 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"math"
+	"strconv"
+	"strings"
 
 	"github.com/taurusgroup/multi-party-sig/internal/bip32"
 	"github.com/taurusgroup/multi-party-sig/internal/params"
@@ -271,4 +274,176 @@ func (c *Config) DeriveBIP32(i uint32) (*Config, error) {
 		return nil, err
 	}
 	return c.Derive(scalar, newChainKey)
+}
+
+func (c *Config) DerivePath(path string) (*Config, error) {
+	// Check path regex
+	// Must be of format "m/k1/k2/k3" where 0 <= k < 2^32
+	// CANNOT use hardened key derivation, e.g. where k >= 2^32
+	// and represented by an apostrophe e.g. "m/k1'/k2'/k3'"
+	pathSlice := strings.Split(path, "/")
+	k1, err := strconv.ParseUint(pathSlice[1], 0, 32)
+
+	k2, err := strconv.ParseUint(pathSlice[2], 0, 32)
+
+	k3, err := strconv.ParseUint(pathSlice[3], 0, 32)
+
+	if len(pathSlice) != 4 || pathSlice[0] != "m" {
+		return nil, fmt.Errorf("Invalid derivation path")
+	}
+
+	// Actual derivation happens like:
+	// m.DeriveBIP32(k1).DeriveBIP32(k2).DeriveBIP32(k3)
+	derivedConfig, err := c.DeriveBIP32(uint32(k1))
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	derivedConfig, err = derivedConfig.DeriveBIP32(uint32(k2))
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	derivedConfig, err = derivedConfig.DeriveBIP32(uint32(k3))
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
+	return derivedConfig, err
+}
+
+func (c Config) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"Group":     c.Group,
+		"ID":        c.ID,
+		"Threshold": c.Threshold,
+		"ECDSA":     c.ECDSA,
+		"ElGamal":   c.ElGamal,
+		"Paillier":  c.Paillier,
+		"RID":       c.RID,
+		"ChainKey":  c.ChainKey,
+		"Public":    c.Public,
+	})
+}
+
+func (c *Config) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ tmp:", e)
+		return e
+	}
+
+	var id party.ID
+	if e := json.Unmarshal(tmp["ID"], &id); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ ID:", e)
+		return e
+	}
+
+	var threshold int
+	if e := json.Unmarshal(tmp["Threshold"], &threshold); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ Threshold:", e)
+		return e
+	}
+
+	var ecdsa curve.Scalar
+	var ecdsaSecp256k1 curve.Secp256k1Scalar
+	if e := json.Unmarshal(tmp["ECDSA"], &ecdsaSecp256k1); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ ECDSA:", e)
+		return e
+	}
+	ecdsa = &ecdsaSecp256k1
+
+	var elgamal curve.Scalar
+	var elgamal256k1 curve.Secp256k1Scalar
+	if e := json.Unmarshal(tmp["ElGamal"], &elgamal256k1); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ ElGamal:", e)
+		return e
+	}
+	elgamal = &elgamal256k1
+
+	var paillier *paillier.SecretKey
+	if e := json.Unmarshal(tmp["Paillier"], &paillier); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ Paillier:", e)
+		return e
+	}
+
+	var rid types.RID
+	if e := json.Unmarshal(tmp["RID"], &rid); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ RID:", e)
+		return e
+	}
+
+	var chainkey types.RID
+	if e := json.Unmarshal(tmp["ChainKey"], &chainkey); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ ChainKey:", e)
+		return e
+	}
+
+	publics := make(map[party.ID]*Public)
+	publicsJson := make(map[party.ID]json.RawMessage)
+	if e := json.Unmarshal(tmp["Public"], &publicsJson); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ Public:", e)
+		return e
+	}
+	for k, v := range publicsJson {
+		var p Public
+		if e := json.Unmarshal(v, &p); e != nil {
+			fmt.Println("Failed to Config.UnmarshalJSON @ Public[k]:", e)
+			return e
+		}
+		publics[k] = &p
+	}
+
+	c.Group = curve.Secp256k1{}
+	c.ID = id
+	c.Threshold = threshold
+	c.ECDSA = ecdsa
+	c.ElGamal = elgamal
+	c.Paillier = paillier
+	c.RID = rid
+	c.ChainKey = chainkey
+	c.Public = publics
+	return nil
+}
+
+func (p *Public) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("Failed to Public.UnmarshalJSON @ tmp:", e)
+		return e
+	}
+
+	var ecdsa curve.Point
+	var ecdsaSecp256k1 curve.Secp256k1Point
+	if e := json.Unmarshal(tmp["ECDSA"], &ecdsaSecp256k1); e != nil {
+		fmt.Println("Failed to Public.UnmarshalJSON @ ECDSA:", e)
+		return e
+	}
+	ecdsa = &ecdsaSecp256k1
+
+	var elgamal curve.Point
+	var elgamal256k1 curve.Secp256k1Point
+	if e := json.Unmarshal(tmp["ElGamal"], &elgamal256k1); e != nil {
+		fmt.Println("Failed to Public.UnmarshalJSON @ ElGamal:", e)
+		return e
+	}
+	elgamal = &elgamal256k1
+
+	var paillier *paillier.PublicKey
+	if e := json.Unmarshal(tmp["Paillier"], &paillier); e != nil {
+		fmt.Println("Failed to Public.UnmarshalJSON @ Paillier:", e)
+		return e
+	}
+
+	pedersen := pedersen.Parameters{}
+	if e := json.Unmarshal(tmp["Pedersen"], &pedersen); e != nil {
+		fmt.Println("Failed to Public.UnmarshalJSON @ Pedersen:", e)
+		return e
+	}
+
+	p.ECDSA = ecdsa
+	p.ElGamal = elgamal
+	p.Paillier = paillier
+	p.Pedersen = &pedersen
+	return nil
 }

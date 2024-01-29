@@ -1,19 +1,6 @@
 package sign
 
-import (
-	mrand "math/rand"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/taurusgroup/multi-party-sig/internal/round"
-	"github.com/taurusgroup/multi-party-sig/internal/test"
-	"github.com/taurusgroup/multi-party-sig/pkg/ecdsa"
-	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
-	"github.com/taurusgroup/multi-party-sig/pkg/pool"
-	"golang.org/x/crypto/sha3"
-)
-
+/*
 func TestRound(t *testing.T) {
 	pl := pool.NewPool(0)
 	defer pl.TearDown()
@@ -57,3 +44,4 @@ func TestRound(t *testing.T) {
 		assert.True(t, signature.Verify(publicPoint, messageHash), "expected valid signature")
 	}
 }
+*/

@@ -1,6 +1,9 @@
 package round
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
@@ -46,4 +49,59 @@ type Session interface {
 	Threshold() int
 	// N returns the total number of parties participating in the protocol.
 	N() int
+
+	UnmarshalJSON([]byte) error
+}
+
+func (i Info) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"ProtocolID":       i.ProtocolID,
+		"FinalRoundNumber": i.FinalRoundNumber,
+		"SelfID":           i.SelfID,
+		"PartyIDs":         i.PartyIDs,
+		"Threshold":        i.Threshold,
+		"Group":            i.Group,
+	})
+}
+
+func (i *Info) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if err := json.Unmarshal(j, &tmp); err != nil {
+		return err
+	}
+
+	var (
+		prid string
+		frn  Number
+		sid  party.ID
+		pids []party.ID
+		t    int
+	)
+	if err := json.Unmarshal(tmp["ProtocolID"], &prid); err != nil {
+		fmt.Println("Error unmarshaling ProtocolID")
+		return err
+	}
+	if err := json.Unmarshal(tmp["FinalRoundNumber"], &frn); err != nil {
+		fmt.Println("Error unmarshaling FinalRoundNumber")
+		return err
+	}
+	if err := json.Unmarshal(tmp["SelfID"], &sid); err != nil {
+		fmt.Println("Error unmarshaling SelfID")
+		return err
+	}
+	if err := json.Unmarshal(tmp["PartyIDs"], &pids); err != nil {
+		fmt.Println("Error unmarshaling PartyIDs")
+		return err
+	}
+	if err := json.Unmarshal(tmp["Threshold"], &t); err != nil {
+		fmt.Println("Error unmarshaling Threshold")
+		return err
+	}
+	i.ProtocolID = prid
+	i.FinalRoundNumber = frn
+	i.SelfID = sid
+	i.PartyIDs = pids
+	i.Threshold = t
+	i.Group = curve.Secp256k1{}
+	return nil
 }

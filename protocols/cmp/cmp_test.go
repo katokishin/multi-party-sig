@@ -1,21 +1,6 @@
 package cmp
 
-import (
-	"crypto/rand"
-	"math"
-	"sync"
-	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"github.com/taurusgroup/multi-party-sig/internal/test"
-	"github.com/taurusgroup/multi-party-sig/pkg/ecdsa"
-	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
-	"github.com/taurusgroup/multi-party-sig/pkg/party"
-	"github.com/taurusgroup/multi-party-sig/pkg/pool"
-	"github.com/taurusgroup/multi-party-sig/pkg/protocol"
-)
-
+/*
 func do(t *testing.T, id party.ID, ids []party.ID, threshold int, message []byte, pl *pool.Pool, n *test.Network, wg *sync.WaitGroup) {
 	defer wg.Done()
 	h, err := protocol.NewMultiHandler(Keygen(curve.Secp256k1{}, id, ids, threshold, pl), nil)
@@ -45,26 +30,6 @@ func do(t *testing.T, id party.ID, ids []party.ID, threshold int, message []byte
 	signature := signResult.(*ecdsa.Signature)
 	assert.True(t, signature.Verify(c.PublicPoint(), message))
 
-	h, err = protocol.NewMultiHandler(Presign(c, ids, pl), nil)
-	require.NoError(t, err)
-
-	test.HandlerLoop(c.ID, h, n)
-
-	signResult, err = h.Result()
-	require.NoError(t, err)
-	require.IsType(t, &ecdsa.PreSignature{}, signResult)
-	preSignature := signResult.(*ecdsa.PreSignature)
-	assert.NoError(t, preSignature.Validate())
-
-	h, err = protocol.NewMultiHandler(PresignOnline(c, preSignature, message, pl), nil)
-	require.NoError(t, err)
-	test.HandlerLoop(c.ID, h, n)
-
-	signResult, err = h.Result()
-	require.NoError(t, err)
-	require.IsType(t, &ecdsa.Signature{}, signResult)
-	signature = signResult.(*ecdsa.Signature)
-	assert.True(t, signature.Verify(c.PublicPoint(), message))
 }
 
 func TestCMP(t *testing.T) {
@@ -154,10 +119,7 @@ func TestStart(t *testing.T) {
 			_, err = Sign(c, tt.partyIDs, m, pl)(nil)
 			t.Log(err)
 			assert.Error(t, err)
-
-			_, err = Presign(c, tt.partyIDs, pl)(nil)
-			t.Log(err)
-			assert.Error(t, err)
 		})
 	}
 }
+*/

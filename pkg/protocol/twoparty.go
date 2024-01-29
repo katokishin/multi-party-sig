@@ -137,14 +137,14 @@ func (h *TwoPartyHandler) advance() {
 			h.abort(err)
 			return
 		}
-		out := make(chan *round.Message, 1)
-		newRound, err := h.round.Finalize(out)
+		out := make([]*round.Message, 1)
+		newRound, out, err := h.round.Finalize(out)
 		if err != nil || newRound == nil {
 			h.abort(err)
 			return
 		}
-		close(out)
-		for roundMsg := range out {
+		// close(out)
+		for _, roundMsg := range out {
 			data, err := cbor.Marshal(roundMsg.Content)
 			if err != nil {
 				panic(fmt.Errorf("failed to marshal round message: %w", err))

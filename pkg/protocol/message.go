@@ -109,3 +109,19 @@ func (m *Message) UnmarshalBinary(data []byte) error {
 	m.BroadcastVerification = deserialized.BroadcastVerification
 	return nil
 }
+
+func (m *Message) UnmarshalBinaryToNew(data []byte) error {
+	var d marshallableMessage
+	if err := cbor.Unmarshal(data, d); err != nil {
+		return nil
+	}
+	m.SSID = d.SSID
+	m.From = d.From
+	m.To = d.To
+	m.Protocol = d.Protocol
+	m.RoundNumber = d.RoundNumber
+	m.Data = d.Data
+	m.Broadcast = d.Broadcast
+	m.BroadcastVerification = d.BroadcastVerification
+	return nil
+}

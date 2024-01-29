@@ -1,10 +1,12 @@
 package sign
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/cronokirby/safenum"
+	"github.com/taurusgroup/multi-party-sig/internal/jsontools"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
 	"github.com/taurusgroup/multi-party-sig/pkg/paillier"
@@ -13,10 +15,10 @@ import (
 	zklogstar "github.com/taurusgroup/multi-party-sig/pkg/zk/logstar"
 )
 
-var _ round.Round = (*round3)(nil)
+var _ round.Round = (*Sround3)(nil)
 
-type round3 struct {
-	*round2
+type Sround3 struct {
+	*Sround2
 
 	// DeltaShareAlpha[j] = αᵢⱼ
 	DeltaShareAlpha map[party.ID]*safenum.Int
@@ -46,7 +48,7 @@ type broadcast3 struct {
 // StoreBroadcastMessage implements round.BroadcastRound.
 //
 // - store Γⱼ
-func (r *round3) StoreBroadcastMessage(msg round.Message) error {
+func (r *Sround3) StoreBroadcastMessage(msg round.Message) error {
 	body, ok := msg.Content.(*broadcast3)
 	if !ok || body == nil {
 		return round.ErrInvalidContent
@@ -61,10 +63,11 @@ func (r *round3) StoreBroadcastMessage(msg round.Message) error {
 // VerifyMessage implements round.Round.
 //
 // - verify zkproofs affg (2x) zklog*.
-func (r *round3) VerifyMessage(msg round.Message) error {
+func (r *Sround3) VerifyMessage(msg round.Message) error {
 	from, to := msg.From, msg.To
 	body, ok := msg.Content.(*message3)
 	if !ok || body == nil {
+		fmt.Println("Sround3.VerifyMessage Error: invalid message content")
 		return round.ErrInvalidContent
 	}
 
@@ -77,6 +80,7 @@ func (r *round3) VerifyMessage(msg round.Message) error {
 		Verifier: r.Paillier[to],
 		Aux:      r.Pedersen[to],
 	}) {
+		fmt.Println("Sround3.VerifyMessage Error: DeltaProof verification failed")
 		return errors.New("failed to validate affg proof for Delta MtA")
 	}
 
@@ -89,6 +93,7 @@ func (r *round3) VerifyMessage(msg round.Message) error {
 		Verifier: r.Paillier[to],
 		Aux:      r.Pedersen[to],
 	}) {
+		fmt.Println("Sround3.VerifyMessage Error: ChiProof verification failed")
 		return errors.New("failed to validate affg proof for Chi MtA")
 	}
 
@@ -98,6 +103,7 @@ func (r *round3) VerifyMessage(msg round.Message) error {
 		Prover: r.Paillier[from],
 		Aux:    r.Pedersen[to],
 	}) {
+		fmt.Println("Sround3.VerifyMessage Error: Log proof verification failed")
 		return errors.New("failed to validate log proof")
 	}
 
@@ -108,7 +114,7 @@ func (r *round3) VerifyMessage(msg round.Message) error {
 //
 // - Decrypt MtA shares,
 // - save αᵢⱼ, α̂ᵢⱼ.
-func (r *round3) StoreMessage(msg round.Message) error {
+func (r *Sround3) StoreMessage(msg round.Message) error {
 	from, body := msg.From, msg.Content.(*message3)
 
 	// αᵢⱼ
@@ -134,7 +140,7 @@ func (r *round3) StoreMessage(msg round.Message) error {
 // - Δᵢ = [kᵢ]Γ
 // - δᵢ = γᵢ kᵢ + ∑ⱼ δᵢⱼ
 // - χᵢ = xᵢ kᵢ + ∑ⱼ χᵢⱼ.
-func (r *round3) Finalize(out chan<- *round.Message) (round.Session, error) {
+func (r *Sround3) Finalize(out []*round.Message) (round.Session, []*round.Message, error) {
 	// Γ = ∑ⱼ Γⱼ
 	Gamma := r.Group().NewPoint()
 	for _, BigGammaShare := range r.BigGammaShare {
@@ -167,12 +173,10 @@ func (r *round3) Finalize(out chan<- *round.Message) (round.Session, error) {
 	}
 
 	DeltaShareScalar := r.Group().NewScalar().SetNat(DeltaShare.Mod(r.Group().Order()))
-	if err := r.BroadcastMessage(out, &broadcast4{
+	out = r.BroadcastMessage(out, &broadcast4{
 		DeltaShare:    DeltaShareScalar,
 		BigDeltaShare: BigDeltaShare,
-	}); err != nil {
-		return r, err
-	}
+	})
 
 	otherIDs := r.OtherPartyIDs()
 	errs := r.Pool.Parallelize(len(otherIDs), func(i int) interface{} {
@@ -186,34 +190,31 @@ func (r *round3) Finalize(out chan<- *round.Message) (round.Session, error) {
 			Aux:    r.Pedersen[j],
 		}, zkPrivate)
 
-		err := r.SendMessage(out, &message4{
+		out = r.SendMessage(out, &message4{
 			ProofLog: proofLog,
 		}, j)
-		if err != nil {
-			return err
-		}
 		return nil
 	})
 	for _, err := range errs {
 		if err != nil {
-			return r, err.(error)
+			return r, nil, err.(error)
 		}
 	}
 
-	return &round4{
-		round3:         r,
+	return &Sround4{
+		Sround3:        r,
 		DeltaShares:    map[party.ID]curve.Scalar{r.SelfID(): DeltaShareScalar},
 		BigDeltaShares: map[party.ID]curve.Point{r.SelfID(): BigDeltaShare},
 		Gamma:          Gamma,
 		ChiShare:       r.Group().NewScalar().SetNat(ChiShare.Mod(r.Group().Order())),
-	}, nil
+	}, out, nil
 }
 
 // RoundNumber implements round.Content.
 func (message3) RoundNumber() round.Number { return 3 }
 
 // MessageContent implements round.Round.
-func (r *round3) MessageContent() round.Content {
+func (r *Sround3) MessageContent() round.Content {
 	return &message3{
 		ProofLog:   zklogstar.Empty(r.Group()),
 		DeltaProof: zkaffg.Empty(r.Group()),
@@ -225,11 +226,108 @@ func (r *round3) MessageContent() round.Content {
 func (broadcast3) RoundNumber() round.Number { return 3 }
 
 // BroadcastContent implements round.BroadcastRound.
-func (r *round3) BroadcastContent() round.BroadcastContent {
+func (r *Sround3) BroadcastContent() round.BroadcastContent {
 	return &broadcast3{
 		BigGammaShare: r.Group().NewPoint(),
 	}
 }
 
 // Number implements round.Round.
-func (round3) Number() round.Number { return 3 }
+func (Sround3) Number() round.Number { return 3 }
+
+func (r *Sround3) MarshalJSON() ([]byte, error) {
+	dsbmap := make(map[party.ID][]byte)
+	for k, v := range r.DeltaShareBeta {
+		v := v
+		dsbmap[k], _ = v.MarshalBinary()
+	}
+	csbmap := make(map[party.ID][]byte)
+	for k, v := range r.ChiShareBeta {
+		v := v
+		csbmap[k], _ = v.MarshalBinary()
+	}
+	r3, e := json.Marshal(map[string]interface{}{
+		"DeltaShareAlpha": r.DeltaShareAlpha,
+		"DeltaShareBeta":  dsbmap,
+		"ChiShareAlpha":   r.ChiShareAlpha,
+		"ChiShareBeta":    csbmap,
+	})
+	if e != nil {
+		fmt.Println("sr3 marshal failed @ r3:", e)
+		return nil, e
+	}
+
+	r2, e := json.Marshal(r.Sround2)
+	if e != nil {
+		fmt.Println("sr3 marshal failed @ r2:", e)
+		return nil, e
+	}
+	return jsontools.JoinJSON(r3, r2)
+}
+
+func (r *Sround3) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if err := json.Unmarshal(j, &tmp); err != nil {
+		fmt.Println("sr3 unmarshal failed @ tmp:", err)
+		return err
+	}
+
+	var r2 *Sround2
+	if err := json.Unmarshal(j, &r2); err != nil {
+		fmt.Println("sr3 unmarshal failed @ sr2:", err)
+		return err
+	}
+	r.Sround2 = r2
+
+	deltasalpha := make(map[party.ID]*safenum.Int)
+	if err := json.Unmarshal(tmp["DeltaShareAlpha"], &deltasalpha); err != nil {
+		fmt.Println("sr3 unmarshal failed @ deltaShareAlpha:", err)
+		return err
+	}
+	r.DeltaShareAlpha = deltasalpha
+
+	deltasbetaBytes := make(map[party.ID][]byte)
+	deltasbeta := make(map[party.ID]*safenum.Int)
+	if err := json.Unmarshal(tmp["DeltaShareBeta"], &deltasbetaBytes); err != nil {
+		fmt.Println("sr3 unmarshal failed @ deltaShareBeta:", err)
+		return err
+	}
+	for k, v := range deltasbetaBytes {
+		v := v
+		share := *&safenum.Int{}
+		err := share.UnmarshalBinary(v)
+		if err != nil {
+			fmt.Println("sr3 unmarshal failed @ deltasbetaBytes:", err)
+			return err
+		}
+		deltasbeta[k] = &share
+	}
+	r.DeltaShareBeta = deltasbeta
+
+	chisalpha := make(map[party.ID]*safenum.Int)
+	if err := json.Unmarshal(tmp["ChiShareAlpha"], &chisalpha); err != nil {
+		fmt.Println("sr3 unmarshal failed @ chiShareAlpha:", err)
+		return err
+	}
+	r.ChiShareAlpha = chisalpha
+
+	chisbetaBytes := make(map[party.ID][]byte)
+	chisbeta := make(map[party.ID]*safenum.Int)
+	if err := json.Unmarshal(tmp["ChiShareBeta"], &chisbetaBytes); err != nil {
+		fmt.Println("sr3 unmarshal failed @ chiShareBeta:", err)
+		return err
+	}
+	for k, v := range chisbetaBytes {
+		v := v
+		share := *&safenum.Int{}
+		err := share.UnmarshalBinary(v)
+		if err != nil {
+			fmt.Println("sr3 unmarshal failed @ chisbetaBytes:", err)
+			return err
+		}
+		chisbeta[k] = &share
+	}
+	r.ChiShareBeta = chisbeta
+
+	return nil
+}

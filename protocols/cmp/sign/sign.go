@@ -40,7 +40,7 @@ func StartSign(config *config.Config, signers []party.ID, message []byte, pl *po
 			Group:            config.Group,
 		}
 
-		helper, err := round.NewSession(info, sessionID, pl, config, types.SigningMessage(message))
+		helper, err := round.NewSession(info, sessionID, pl, config.RID, types.SigningMessage(message))
 		if err != nil {
 			return nil, fmt.Errorf("sign.Create: %w", err)
 		}
@@ -68,7 +68,7 @@ func StartSign(config *config.Config, signers []party.ID, message []byte, pl *po
 			PublicKey = PublicKey.Add(ECDSA[j])
 		}
 
-		return &round1{
+		return &Sround1{
 			Helper:         helper,
 			PublicKey:      PublicKey,
 			SecretECDSA:    SecretECDSA,

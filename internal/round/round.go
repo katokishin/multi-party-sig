@@ -23,7 +23,7 @@ type Round interface {
 	// In the last round, Finalize should return
 	//   r.ResultRound(result), nil
 	// where result is the output of the protocol.
-	Finalize(out chan<- *Message) (Session, error)
+	Finalize(out []*Message) (Session, []*Message, error)
 
 	// MessageContent returns an uninitialized message.Content for this round.
 	//
@@ -32,6 +32,8 @@ type Round interface {
 
 	// Number returns the current round number.
 	Number() Number
+
+	UnmarshalJSON([]byte) error
 }
 
 // BroadcastRound extends Round in that it expects a broadcast message before the p2p message.

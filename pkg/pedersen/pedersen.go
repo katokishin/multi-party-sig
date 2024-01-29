@@ -1,10 +1,12 @@
 package pedersen
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 
 	"github.com/cronokirby/safenum"
+	"github.com/fxamacker/cbor/v2"
 	"github.com/taurusgroup/multi-party-sig/internal/params"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/arith"
 )
@@ -121,4 +123,49 @@ func (p *Parameters) WriteTo(w io.Writer) (int64, error) {
 // Domain implements hash.WriterToWithDomain, and separates this type within hash.Hash.
 func (Parameters) Domain() string {
 	return "Pedersen Parameters"
+}
+
+func (p *Parameters) MarshalBinary() ([]byte, error) {
+	tmp := [3][]byte{p.n.Bytes(), p.s.Bytes(), p.t.Bytes()}
+	return cbor.Marshal(tmp)
+}
+
+func (p Parameters) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"s": p.s.Bytes(),
+		"t": p.t.Bytes(),
+		"n": p.n.Bytes(),
+	})
+}
+
+func (p *Parameters) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("Pedersen Parameters.UnmarshalJSON failed @ tmp:", e)
+		return e
+	}
+
+	var n []byte
+	var s, t []byte
+
+	if e := json.Unmarshal(tmp["n"], &n); e != nil {
+		fmt.Println("Pedersen Parameters.UnmarshalJSON failed @ n:", e)
+		return e
+	}
+	if e := json.Unmarshal(tmp["s"], &s); e != nil {
+		fmt.Println("Pedersen Parameters.UnmarshalJSON failed @ s:", e)
+		return e
+	}
+	if e := json.Unmarshal(tmp["t"], &t); e != nil {
+		fmt.Println("Pedersen Parameters.UnmarshalJSON failed @ t:", e)
+		return e
+	}
+
+	p.s = &safenum.Nat{}
+	p.t = &safenum.Nat{}
+	nFrombytes := arith.ModulusFromBytes(n)
+	p.n = &nFrombytes
+	p.s.SetBytes(s)
+	p.t.SetBytes(t)
+	return nil
 }

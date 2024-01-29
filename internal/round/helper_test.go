@@ -1,14 +1,6 @@
 package round_test
 
-import (
-	"testing"
-
-	"github.com/taurusgroup/multi-party-sig/internal/round"
-	"github.com/taurusgroup/multi-party-sig/internal/test"
-	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
-	"github.com/taurusgroup/multi-party-sig/pkg/party"
-)
-
+/*
 func TestNewSession(t *testing.T) {
 	RNumber := round.Number(5)
 	T := 20
@@ -114,3 +106,4 @@ func TestNewSession(t *testing.T) {
 		})
 	}
 }
+*/

@@ -1,7 +1,9 @@
 package curve
 
 import (
+	"encoding/base64"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -26,9 +28,9 @@ func (Secp256k1) NewPoint() Point {
 
 func (Secp256k1) NewBasePoint() Point {
 	out := new(Secp256k1Point)
-	out.value.X.Set(&secp256k1BaseX)
-	out.value.Y.Set(&secp256k1BaseY)
-	out.value.Z.SetInt(1)
+	out.Value.X.Set(&secp256k1BaseX)
+	out.Value.Y.Set(&secp256k1BaseY)
+	out.Value.Z.SetInt(1)
 	return out
 }
 
@@ -44,6 +46,13 @@ func (Secp256k1) SafeScalarBytes() int {
 	return 32
 }
 
+func (s Secp256k1) UnmarshalJSON(j []byte) error {
+	if err := json.Unmarshal([]byte(`{}`), &s); err != nil {
+		return err
+	}
+	return nil
+}
+
 var secp256k1OrderNat, _ = new(safenum.Nat).SetHex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
 var secp256k1Order = safenum.ModulusFromNat(secp256k1OrderNat)
 
@@ -53,11 +62,11 @@ func (Secp256k1) Order() *safenum.Modulus {
 
 func (Secp256k1) LiftX(data []byte) (*Secp256k1Point, error) {
 	out := new(Secp256k1Point)
-	out.value.Z.SetInt(1)
-	if out.value.X.SetByteSlice(data) {
+	out.Value.Z.SetInt(1)
+	if out.Value.X.SetByteSlice(data) {
 		return nil, fmt.Errorf("secp256k1Point.UnmarshalBinary: x coordinate out of range")
 	}
-	if !secp256k1.DecompressY(&out.value.X, false, &out.value.Y) {
+	if !secp256k1.DecompressY(&out.Value.X, false, &out.Value.Y) {
 		return nil, fmt.Errorf("secp256k1Point.UnmarshalBinary: x coordinate not on curve")
 	}
 	return out, nil
@@ -68,7 +77,7 @@ func (Secp256k1) Name() string {
 }
 
 type Secp256k1Scalar struct {
-	value secp256k1.ModNScalar
+	Value secp256k1.ModNScalar
 }
 
 func secp256k1CastScalar(generic Scalar) *Secp256k1Scalar {
@@ -84,7 +93,7 @@ func (*Secp256k1Scalar) Curve() Curve {
 }
 
 func (s *Secp256k1Scalar) MarshalBinary() ([]byte, error) {
-	data := s.value.Bytes()
+	data := s.Value.Bytes()
 	return data[:], nil
 }
 
@@ -94,7 +103,7 @@ func (s *Secp256k1Scalar) UnmarshalBinary(data []byte) error {
 	}
 	var exactData [32]byte
 	copy(exactData[:], data)
-	if s.value.SetBytes(&exactData) != 0 {
+	if s.Value.SetBytes(&exactData) != 0 {
 		return errors.New("invalid bytes for secp256k1 scalar")
 	}
 	return nil
@@ -103,7 +112,7 @@ func (s *Secp256k1Scalar) UnmarshalBinary(data []byte) error {
 func (s *Secp256k1Scalar) Add(that Scalar) Scalar {
 	other := secp256k1CastScalar(that)
 
-	s.value.Add(&other.value)
+	s.Value.Add(&other.Value)
 	return s
 }
 
@@ -111,68 +120,108 @@ func (s *Secp256k1Scalar) Sub(that Scalar) Scalar {
 	other := secp256k1CastScalar(that)
 
 	negated := new(Secp256k1Scalar)
-	negated.value.Set(&other.value)
-	negated.value.Negate()
+	negated.Value.Set(&other.Value)
+	negated.Value.Negate()
 
-	s.value.Add(&negated.value)
+	s.Value.Add(&negated.Value)
 	return s
 }
 
 func (s *Secp256k1Scalar) Mul(that Scalar) Scalar {
 	other := secp256k1CastScalar(that)
 
-	s.value.Mul(&other.value)
+	s.Value.Mul(&other.Value)
 	return s
 }
 
 func (s *Secp256k1Scalar) Invert() Scalar {
-	s.value.InverseNonConst()
+	s.Value.InverseNonConst()
 	return s
 }
 
 func (s *Secp256k1Scalar) Negate() Scalar {
-	s.value.Negate()
+	s.Value.Negate()
 	return s
+}
+
+func (s *Secp256k1Scalar) IsOverHalfOrder() bool {
+	return s.Value.IsOverHalfOrder()
 }
 
 func (s *Secp256k1Scalar) Equal(that Scalar) bool {
 	other := secp256k1CastScalar(that)
 
-	return s.value.Equals(&other.value)
+	return s.Value.Equals(&other.Value)
 }
 
 func (s *Secp256k1Scalar) IsZero() bool {
-	return s.value.IsZero()
+	return s.Value.IsZero()
 }
 
 func (s *Secp256k1Scalar) Set(that Scalar) Scalar {
 	other := secp256k1CastScalar(that)
 
-	s.value.Set(&other.value)
+	s.Value.Set(&other.Value)
 	return s
 }
 
 func (s *Secp256k1Scalar) SetNat(x *safenum.Nat) Scalar {
 	reduced := new(safenum.Nat).Mod(x, secp256k1Order)
-	s.value.SetByteSlice(reduced.Bytes())
+	s.Value.SetByteSlice(reduced.Bytes())
 	return s
 }
 
 func (s *Secp256k1Scalar) Act(that Point) Point {
 	other := secp256k1CastPoint(that)
 	out := new(Secp256k1Point)
-	secp256k1.ScalarMultNonConst(&s.value, &other.value, &out.value)
+	secp256k1.ScalarMultNonConst(&s.Value, &other.Value, &out.Value)
 	return out
 }
 
 func (s *Secp256k1Scalar) ActOnBase() Point {
 	out := new(Secp256k1Point)
-	secp256k1.ScalarBaseMultNonConst(&s.value, &out.value)
+	secp256k1.ScalarBaseMultNonConst(&s.Value, &out.Value)
 	return out
 }
 
+func (s Secp256k1Scalar) MarshalJSON() ([]byte, error) {
+	b, e := s.MarshalBinary()
+	if e != nil {
+		fmt.Println("Failed to Secp256k1Scalar MarshalBinary()", e)
+		return nil, e
+	}
+	return json.Marshal(map[string]interface{}{
+		"Value": base64.StdEncoding.EncodeToString(b),
+	})
+}
+
+// Expects a JSON like "Value": base64
+func (s *Secp256k1Scalar) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if err := json.Unmarshal(j, &tmp); err != nil {
+		fmt.Println("secp256k1scalar unmarshal failed @ tmp:", err)
+		return err
+	}
+	// Strip ""s from json.RawMessage
+	randStr := string(tmp["Value"][1 : len(tmp["Value"])-1])
+	// Convert base64 to bytes
+	randBytes, e := base64.StdEncoding.DecodeString(randStr)
+	if e != nil {
+		fmt.Println("base64 decoding failed: randBytes", e)
+		return e
+	}
+
+	var s2 Secp256k1Scalar
+	if e := s2.UnmarshalBinary(randBytes); e != nil {
+		fmt.Println("secp256k1scalar UnmarshalBinary failed at s: ", e)
+		return e
+	}
+	s.Value = s2.Value
+	return nil
+}
+
 type Secp256k1Point struct {
-	value secp256k1.JacobianPoint
+	Value secp256k1.JacobianPoint
 }
 
 func secp256k1CastPoint(generic Point) *Secp256k1Point {
@@ -188,14 +237,54 @@ func (*Secp256k1Point) Curve() Curve {
 }
 
 func (p *Secp256k1Point) XBytes() []byte {
-	p.value.ToAffine()
-	return p.value.X.Bytes()[:]
+	p.Value.ToAffine()
+	return p.Value.X.Bytes()[:]
+}
+
+func (p *Secp256k1Point) YBytes() []byte {
+	p.Value.ToAffine()
+	return p.Value.Y.Bytes()[:]
+}
+
+func (p *Secp256k1Point) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"X": base64.StdEncoding.EncodeToString(p.Value.X.Bytes()[:]),
+		"Y": base64.StdEncoding.EncodeToString(p.Value.Y.Bytes()[:]),
+		"Z": base64.StdEncoding.EncodeToString(p.Value.Z.Bytes()[:]),
+	})
+}
+
+func (p *Secp256k1Point) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if err := json.Unmarshal(j, &tmp); err != nil {
+		fmt.Println("secp256k1point unmarshal failed @ tmp:", err)
+		return err
+	}
+	base64Xbytes, e := base64.StdEncoding.DecodeString(string(tmp["X"][1 : len(tmp["X"])-1]))
+	if e != nil {
+		fmt.Println("base64 decode err:", e)
+		return e
+	}
+	base64Ybytes, e := base64.StdEncoding.DecodeString(string(tmp["Y"][1 : len(tmp["Y"])-1]))
+	if e != nil {
+		fmt.Println("base64 decode err:", e)
+		return e
+	}
+	base64Zbytes, e := base64.StdEncoding.DecodeString(string(tmp["Z"][1 : len(tmp["Z"])-1]))
+	if e != nil {
+		fmt.Println("base64 decode err:", e)
+		return e
+	}
+	p.Value.X.SetBytes((*[32]byte)(base64Xbytes))
+	p.Value.Y.SetBytes((*[32]byte)(base64Ybytes))
+	p.Value.Z.SetBytes((*[32]byte)(base64Zbytes))
+	return nil
 }
 
 func (p *Secp256k1Point) MarshalBinary() ([]byte, error) {
 	out := make([]byte, 33)
 	// we clone v to not case a race during a hash.Write
-	v := p.value
+	v := p.Value
 	v.ToAffine()
 	// Doing it this way is compatible with Bitcoin
 	out[0] = byte(v.Y.IsOddBit()) + 2
@@ -208,11 +297,11 @@ func (p *Secp256k1Point) UnmarshalBinary(data []byte) error {
 	if len(data) != 33 {
 		return fmt.Errorf("invalid length for secp256k1Point: %d", len(data))
 	}
-	p.value.Z.SetInt(1)
-	if p.value.X.SetByteSlice(data[1:]) {
+	p.Value.Z.SetInt(1)
+	if p.Value.X.SetByteSlice(data[1:]) {
 		return fmt.Errorf("secp256k1Point.UnmarshalBinary: x coordinate out of range")
 	}
-	if !secp256k1.DecompressY(&p.value.X, data[0] == 3, &p.value.Y) {
+	if !secp256k1.DecompressY(&p.Value.X, data[0] == 3, &p.Value.Y) {
 		return fmt.Errorf("secp256k1Point.UnmarshalBinary: x coordinate not on curve")
 	}
 	return nil
@@ -222,7 +311,7 @@ func (p *Secp256k1Point) Add(that Point) Point {
 	other := secp256k1CastPoint(that)
 
 	out := new(Secp256k1Point)
-	secp256k1.AddNonConst(&p.value, &other.value, &out.value)
+	secp256k1.AddNonConst(&p.Value, &other.Value, &out.Value)
 	return out
 }
 
@@ -233,38 +322,45 @@ func (p *Secp256k1Point) Sub(that Point) Point {
 func (p *Secp256k1Point) Set(that Point) Point {
 	other := secp256k1CastPoint(that)
 
-	p.value.Set(&other.value)
+	p.Value.Set(&other.Value)
 	return p
 }
 
 func (p *Secp256k1Point) Negate() Point {
 	out := new(Secp256k1Point)
-	out.value.Set(&p.value)
-	out.value.Y.Negate(1)
-	out.value.Y.Normalize()
+	out.Value.Set(&p.Value)
+	out.Value.Y.Negate(1)
+	out.Value.Y.Normalize()
 	return out
 }
 
 func (p *Secp256k1Point) Equal(that Point) bool {
 	other := secp256k1CastPoint(that)
 
-	p.value.ToAffine()
-	other.value.ToAffine()
-	return p.value.X.Equals(&other.value.X) && p.value.Y.Equals(&other.value.Y) && p.value.Z.Equals(&other.value.Z)
+	p.Value.ToAffine()
+	other.Value.ToAffine()
+	return p.Value.X.Equals(&other.Value.X) && p.Value.Y.Equals(&other.Value.Y) && p.Value.Z.Equals(&other.Value.Z)
 }
 
 func (p *Secp256k1Point) IsIdentity() bool {
-	return p == nil || (p.value.X.IsZero() && p.value.Y.IsZero()) || p.value.Z.IsZero()
+	return p == nil || (p.Value.X.IsZero() && p.Value.Y.IsZero()) || p.Value.Z.IsZero()
 }
 
 func (p *Secp256k1Point) HasEvenY() bool {
-	p.value.ToAffine()
-	return !p.value.Y.IsOdd()
+	p.Value.ToAffine()
+	return !p.Value.Y.IsOdd()
 }
 
 func (p *Secp256k1Point) XScalar() Scalar {
 	out := new(Secp256k1Scalar)
-	p.value.ToAffine()
-	out.value.SetBytes(p.value.X.Bytes())
+	p.Value.ToAffine()
+	out.Value.SetBytes(p.Value.X.Bytes())
 	return out
+}
+
+func PrintAffine(p *Secp256k1Point) {
+	v := p.Value
+	v.ToAffine()
+	fmt.Printf("Affined secp256k1point: %+v %+v %+v\n", v.X, v.Y, v.Z)
+	return
 }

@@ -25,6 +25,12 @@ func ModulusFromN(n *safenum.Modulus) *Modulus {
 	}
 }
 
+func ModulusFromBytes(b []byte) Modulus {
+	return Modulus{
+		Modulus: safenum.ModulusFromBytes(b),
+	}
+}
+
 // ModulusFromFactors creates the necessary cached values to accelerate
 // exponentiation mod n.
 func ModulusFromFactors(p, q *safenum.Nat) *Modulus {
