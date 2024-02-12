@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/cronokirby/safenum"
+	"github.com/cronokirby/saferith"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
 )
@@ -69,7 +69,7 @@ func (p *Exponent) Evaluate(x curve.Scalar) curve.Point {
 func (p *Exponent) evaluateClassic(x curve.Scalar) curve.Point {
 	var tmp curve.Point
 
-	xPower := p.Group.NewScalar().SetNat(new(safenum.Nat).SetUint64(1))
+	xPower := p.Group.NewScalar().SetNat(new(saferith.Nat).SetUint64(1))
 	result := p.Group.NewPoint()
 
 	if p.IsConstant {
@@ -256,4 +256,13 @@ func (e *Exponent) UnmarshalJSON(j []byte) error {
 	e.Coefficients = coes
 	e.IsConstant = isConstant
 	return nil
+}
+
+func (e *Exponent) AffineIt() *Exponent {
+	for i, co := range e.Coefficients {
+		co := co
+		co.(*curve.Secp256k1Point).Value.ToAffine()
+		e.Coefficients[i] = co
+	}
+	return e
 }

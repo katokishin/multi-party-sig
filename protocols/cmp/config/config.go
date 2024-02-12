@@ -45,6 +45,8 @@ type Config struct {
 	ChainKey types.RID
 	// Public maps party.ID to public. It contains all public information associated to a party.
 	Public map[party.ID]*Public
+	// PublicPt is the group's public ECC point
+	PublicPt []byte
 }
 
 // Public holds public information for a party.
@@ -241,7 +243,7 @@ func (c *Config) Derive(adjust curve.Scalar, newChainKey []byte) (*Config, error
 		}
 	}
 
-	return &Config{
+	config := &Config{
 		Group:     c.Group,
 		ID:        c.ID,
 		Threshold: c.Threshold,
@@ -251,7 +253,13 @@ func (c *Config) Derive(adjust curve.Scalar, newChainKey []byte) (*Config, error
 		RID:       c.RID,
 		ChainKey:  newChainKey,
 		Public:    public,
-	}, nil
+	}
+	publicPt := config.PublicPoint()
+	publicPt.(*curve.Secp256k1Point).ToAffine()
+	compressed := publicPt.(*curve.Secp256k1Point).Compress()
+	config.PublicPt = compressed
+
+	return config, nil
 }
 
 // DeriveBIP32 derives a sharing of the ith child of the consortium signing key.
@@ -283,10 +291,22 @@ func (c *Config) DerivePath(path string) (*Config, error) {
 	// and represented by an apostrophe e.g. "m/k1'/k2'/k3'"
 	pathSlice := strings.Split(path, "/")
 	k1, err := strconv.ParseUint(pathSlice[1], 0, 32)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
 
 	k2, err := strconv.ParseUint(pathSlice[2], 0, 32)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
 
 	k3, err := strconv.ParseUint(pathSlice[3], 0, 32)
+	if err != nil {
+		fmt.Println(err)
+		return nil, err
+	}
 
 	if len(pathSlice) != 4 || pathSlice[0] != "m" {
 		return nil, fmt.Errorf("Invalid derivation path")
@@ -323,6 +343,7 @@ func (c Config) MarshalJSON() ([]byte, error) {
 		"RID":       c.RID,
 		"ChainKey":  c.ChainKey,
 		"Public":    c.Public,
+		"PublicPt":  c.PublicPt,
 	})
 }
 
@@ -394,6 +415,12 @@ func (c *Config) UnmarshalJSON(j []byte) error {
 		publics[k] = &p
 	}
 
+	var publicPt []byte
+	if e := json.Unmarshal(tmp["PublicPt"], &publicPt); e != nil {
+		fmt.Println("Failed to Config.UnmarshalJSON @ PublicPt:", e)
+		return e
+	}
+
 	c.Group = curve.Secp256k1{}
 	c.ID = id
 	c.Threshold = threshold
@@ -403,6 +430,7 @@ func (c *Config) UnmarshalJSON(j []byte) error {
 	c.RID = rid
 	c.ChainKey = chainkey
 	c.Public = publics
+	c.PublicPt = publicPt
 	return nil
 }
 

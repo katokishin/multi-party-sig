@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cronokirby/safenum"
+	"github.com/cronokirby/saferith"
 	"github.com/decred/dcrd/dcrec/secp256k1/v3"
 )
 
@@ -53,10 +53,10 @@ func (s Secp256k1) UnmarshalJSON(j []byte) error {
 	return nil
 }
 
-var secp256k1OrderNat, _ = new(safenum.Nat).SetHex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
-var secp256k1Order = safenum.ModulusFromNat(secp256k1OrderNat)
+var secp256k1OrderNat, _ = new(saferith.Nat).SetHex("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141")
+var secp256k1Order = saferith.ModulusFromNat(secp256k1OrderNat)
 
-func (Secp256k1) Order() *safenum.Modulus {
+func (Secp256k1) Order() *saferith.Modulus {
 	return secp256k1Order
 }
 
@@ -165,8 +165,8 @@ func (s *Secp256k1Scalar) Set(that Scalar) Scalar {
 	return s
 }
 
-func (s *Secp256k1Scalar) SetNat(x *safenum.Nat) Scalar {
-	reduced := new(safenum.Nat).Mod(x, secp256k1Order)
+func (s *Secp256k1Scalar) SetNat(x *saferith.Nat) Scalar {
+	reduced := new(saferith.Nat).Mod(x, secp256k1Order)
 	s.Value.SetByteSlice(reduced.Bytes())
 	return s
 }
@@ -356,6 +356,22 @@ func (p *Secp256k1Point) XScalar() Scalar {
 	p.Value.ToAffine()
 	out.Value.SetBytes(p.Value.X.Bytes())
 	return out
+}
+
+func (p *Secp256k1Point) ToAffine() {
+	v := p.Value
+	v.ToAffine()
+	p.Value = v
+	return
+}
+
+func (p *Secp256k1Point) Compress() []byte {
+	compressionByte := byte(0x02)
+	if p.Value.Y.IsOdd() {
+		compressionByte = byte(0x03)
+	}
+	result := append([]byte{compressionByte}, p.XBytes()...)
+	return result
 }
 
 func PrintAffine(p *Secp256k1Point) {

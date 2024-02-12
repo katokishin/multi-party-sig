@@ -5,6 +5,8 @@ package main
 // #include <stdlib.h>
 import "C"
 
+// `GOOS=wasip1 GOARCH=wasm go build -o main.wasm` to build to wasi
+
 import (
 	"encoding/json"
 	"fmt"
@@ -392,7 +394,7 @@ func returnSigIfDone(r ContSignResult) (res ContSignResult, e error) {
 
 type DeriveParams struct {
 	Config         cmp.Config
-	derivationPath string
+	DerivationPath string
 }
 
 //export deriveC
@@ -403,8 +405,7 @@ func deriveC(opts *C.char) *C.char {
 		fmt.Println("Failed to unmarhal DeriveParams @ dStruct:", e)
 		return C.CString(e.Error())
 	}
-
-	bip32Child, e := dStruct.Config.DerivePath(dStruct.derivationPath)
+	bip32Child, e := dStruct.Config.DerivePath(dStruct.DerivationPath)
 	if e != nil {
 		fmt.Println("Failed to derive BIP32 child @ deriveC:", e)
 		return C.CString(e.Error())

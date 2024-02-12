@@ -174,6 +174,32 @@ func (z *Response) Verify(hash *hash.Hash, public curve.Point, commitment *Commi
 	return lhs.Equal(rhs)
 }
 
+func (r Response) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"Z": r.Z,
+	})
+}
+
+func (r *Response) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("sch.Response unmarhsalJSON failed @ tmp")
+		return e
+	}
+
+	var scalar curve.Scalar
+	var scalar256k1 curve.Secp256k1Scalar
+	if e := json.Unmarshal(tmp["Z"], &scalar256k1); e != nil {
+		fmt.Println("sch.Response unmarhsalJSON failed @ scalar")
+		return e
+	}
+	scalar = &scalar256k1
+
+	r.group = curve.Secp256k1{}
+	r.Z = scalar
+	return nil
+}
+
 // Verify checks that Proof.Response•G = Proof.Commitment + H(..., Proof.Commitment, Public)•Public.
 func (p *Proof) Verify(hash *hash.Hash, public, gen curve.Point) bool {
 	if !p.IsValid() {

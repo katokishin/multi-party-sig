@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/fxamacker/cbor/v2"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/pkg/ecdsa"
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
@@ -213,7 +212,6 @@ func (h *MultiHandler) verifyBroadcastMessage(msg *Message) error {
 		fmt.Println("verifyBroadcastMessage: could not convert raw message into round.Message")
 		return err
 	}
-
 	// store the Broadcast message for this round
 	if err = r.(round.BroadcastRound).StoreBroadcastMessage(roundMsg); err != nil {
 		fmt.Println("verifyBroadcastMessage: error storing broadcast message")
@@ -357,7 +355,7 @@ func (h *MultiHandler) ProcessRound() []*Message {
 		if roundMsg == nil {
 			break
 		}
-		data, err := cbor.Marshal(roundMsg.Content)
+		data, err := json.Marshal(roundMsg.Content)
 		if err != nil {
 			panic(fmt.Errorf("failed to marshal round message: %w", err))
 		}
@@ -407,7 +405,7 @@ func (h *MultiHandler) finalize() {
 			break
 		}
 		fmt.Printf("%+v\n", roundMsg)
-		data, err := cbor.Marshal(roundMsg.Content)
+		data, err := json.Marshal(roundMsg.Content)
 		if err != nil {
 			panic(fmt.Errorf("failed to marshal round message: %w", err))
 		}
@@ -593,6 +591,7 @@ func getRoundMessage(msg *Message, r round.Session) (round.Message, error) {
 	if msg.Broadcast {
 		b, ok := r.(round.BroadcastRound)
 		if !ok {
+			fmt.Println("getRoundMessage() got Broadcast message when expecting none")
 			return round.Message{}, errors.New("got Broadcast message when none was expected")
 		}
 		content = b.BroadcastContent()
@@ -601,11 +600,10 @@ func getRoundMessage(msg *Message, r round.Session) (round.Message, error) {
 	}
 
 	// unmarshal message
-	if err := cbor.Unmarshal(msg.Data, content); err != nil {
+	if err := json.Unmarshal(msg.Data, content); err != nil {
+		fmt.Println("getRoundMessage() failed to unmarshal msg.Data")
 		return round.Message{}, fmt.Errorf("failed to unmarshal: %w", err)
 	}
-	//fmt.Printf("getRoundMessage() was passed this msg.Data: %+v\n", msg.Data)
-	//fmt.Printf("getRoundMessage() returned this content: %+v\n", content)
 	roundMsg := round.Message{
 		From:      msg.From,
 		To:        msg.To,

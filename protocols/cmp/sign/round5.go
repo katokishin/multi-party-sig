@@ -34,7 +34,7 @@ type Sround5 struct {
 	R curve.Scalar
 }
 
-type broadcast5 struct {
+type Broadcast5 struct {
 	round.NormalBroadcastContent
 	SigmaShare curve.Scalar
 }
@@ -43,7 +43,7 @@ type broadcast5 struct {
 //
 // - save σⱼ
 func (r *Sround5) StoreBroadcastMessage(msg round.Message) error {
-	body, ok := msg.Content.(*broadcast5)
+	body, ok := msg.Content.(*Broadcast5)
 	if !ok || body == nil {
 		return round.ErrInvalidContent
 	}
@@ -89,11 +89,11 @@ func (r *Sround5) Finalize([]*round.Message) (round.Session, []*round.Message, e
 func (r *Sround5) MessageContent() round.Content { return nil }
 
 // RoundNumber implements round.Content.
-func (broadcast5) RoundNumber() round.Number { return 5 }
+func (Broadcast5) RoundNumber() round.Number { return 5 }
 
 // BroadcastContent implements round.BroadcastRound.
 func (r *Sround5) BroadcastContent() round.BroadcastContent {
-	return &broadcast5{
+	return &Broadcast5{
 		SigmaShare: r.Group().NewScalar(),
 	}
 }

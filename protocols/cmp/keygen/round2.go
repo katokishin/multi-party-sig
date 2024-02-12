@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/cronokirby/safenum"
+	"github.com/cronokirby/saferith"
 	"github.com/taurusgroup/multi-party-sig/internal/jsontools"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/internal/types"
@@ -42,9 +42,9 @@ type Kround2 struct {
 	PaillierPublic map[party.ID]*paillier.PublicKey
 
 	// NModulus[j] = Nⱼ
-	NModulus map[party.ID]*safenum.Modulus
+	NModulus map[party.ID]*saferith.Modulus
 	// S[j], T[j] = sⱼ, tⱼ
-	S, T map[party.ID]*safenum.Nat
+	S, T map[party.ID]*saferith.Nat
 
 	ElGamalSecret curve.Scalar
 
@@ -53,7 +53,7 @@ type Kround2 struct {
 
 	// PedersenSecret = λᵢ
 	// Used to generate the Pedersen parameters
-	PedersenSecret *safenum.Nat
+	PedersenSecret *saferith.Nat
 
 	// SchnorrRand = aᵢ
 	// Randomness used to compute Schnorr commitment of proof of knowledge of secret share
@@ -279,7 +279,7 @@ func (r *Kround2) UnmarshalJSON(j []byte) error {
 	}
 	r.PaillierPublic = paillierpub
 
-	nmod := make(map[party.ID]*safenum.Modulus)
+	nmod := make(map[party.ID]*saferith.Modulus)
 	nmodBytes := make(map[party.ID][]byte)
 	if err := json.Unmarshal(tmp["NModulus"], &nmodBytes); err != nil {
 		fmt.Println("kr2 unmarshal failed @ nmod:", err)
@@ -287,12 +287,12 @@ func (r *Kround2) UnmarshalJSON(j []byte) error {
 	}
 	for k, nm := range nmodBytes {
 		nm := nm
-		nmod[k] = safenum.ModulusFromBytes(nm)
+		nmod[k] = saferith.ModulusFromBytes(nm)
 	}
 	r.NModulus = nmod
 
-	s := make(map[party.ID]*safenum.Nat)
-	t := make(map[party.ID]*safenum.Nat)
+	s := make(map[party.ID]*saferith.Nat)
+	t := make(map[party.ID]*saferith.Nat)
 	sBytes := make(map[party.ID][]byte)
 	tBytes := make(map[party.ID][]byte)
 	if err := json.Unmarshal(tmp["S"], &sBytes); err != nil {
@@ -305,12 +305,12 @@ func (r *Kround2) UnmarshalJSON(j []byte) error {
 	}
 	for k, sb := range sBytes {
 		sb := sb
-		nat := &safenum.Nat{}
+		nat := &saferith.Nat{}
 		s[k] = nat.SetBytes(sb)
 	}
 	for k, tb := range tBytes {
 		tb := tb
-		nat := &safenum.Nat{}
+		nat := &saferith.Nat{}
 		t[k] = nat.SetBytes(tb)
 	}
 	r.S = s
@@ -330,13 +330,13 @@ func (r *Kround2) UnmarshalJSON(j []byte) error {
 	}
 	r.PaillierSecret = pailliersecret
 
-	var pedersensecret *safenum.Nat
+	var pedersensecret *saferith.Nat
 	var pedersensecretBytes []byte
 	if err := json.Unmarshal(tmp["PedersenSecret"], &pedersensecretBytes); err != nil {
 		fmt.Println("kr2 unmarshal failed @ pedersensecret:", err)
 		return err
 	}
-	pedersensecret = &safenum.Nat{}
+	pedersensecret = &saferith.Nat{}
 	pedersensecret.SetBytes(pedersensecretBytes)
 	r.PedersenSecret = pedersensecret
 
@@ -359,7 +359,7 @@ func (r *Kround2) UnmarshalJSON(j []byte) error {
 
 func (b Broadcast2) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}{
-		"Commitment": b.Commitment,
+		"keyB2Commitment": b.Commitment,
 	})
 }
 
@@ -370,13 +370,11 @@ func (b *Broadcast2) UnmarshalJSON(j []byte) error {
 		return e
 	}
 
-	var hc []byte
-	if e := json.Unmarshal(tmp["Commitment"], &hc); e != nil {
+	hc := hash.Commitment{}
+	if e := json.Unmarshal(tmp["keyB2Commitment"], &hc); e != nil {
 		fmt.Println("Failed to unmarshal Broadcast2 @ hc:", e)
 		return e
 	}
-	b = &Broadcast2{
-		Commitment: hc,
-	}
+	b.Commitment = hc
 	return nil
 }

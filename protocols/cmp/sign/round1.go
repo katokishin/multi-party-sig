@@ -64,7 +64,7 @@ func (r *Sround1) Finalize(out []*round.Message) (round.Session, []*round.Messag
 	K, KNonce := r.Paillier[r.SelfID()].Enc(curve.MakeInt(KShare))
 
 	otherIDs := r.OtherPartyIDs()
-	broadcastMsg := broadcast2{K: K, G: G}
+	broadcastMsg := Broadcast2{K: K, G: G}
 	out = r.BroadcastMessage(out, &broadcastMsg)
 	errors := r.Pool.Parallelize(len(otherIDs), func(i int) interface{} {
 		j := otherIDs[i]
@@ -77,7 +77,7 @@ func (r *Sround1) Finalize(out []*round.Message) (round.Session, []*round.Messag
 			Rho: KNonce,
 		})
 
-		out = r.SendMessage(out, &message2{
+		out = r.SendMessage(out, &Message2{
 			ProofEnc: proof,
 		}, j)
 		return nil

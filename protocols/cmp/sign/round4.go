@@ -29,11 +29,11 @@ type Sround4 struct {
 	ChiShare curve.Scalar
 }
 
-type message4 struct {
+type Message4 struct {
 	ProofLog *zklogstar.Proof
 }
 
-type broadcast4 struct {
+type Broadcast4 struct {
 	round.NormalBroadcastContent
 	// DeltaShare = δⱼ
 	DeltaShare curve.Scalar
@@ -45,7 +45,7 @@ type broadcast4 struct {
 //
 // - store δⱼ, Δⱼ
 func (r *Sround4) StoreBroadcastMessage(msg round.Message) error {
-	body, ok := msg.Content.(*broadcast4)
+	body, ok := msg.Content.(*Broadcast4)
 	if !ok || body == nil {
 		return round.ErrInvalidContent
 	}
@@ -62,7 +62,7 @@ func (r *Sround4) StoreBroadcastMessage(msg round.Message) error {
 // - Verify Π(log*)(ϕ”ᵢⱼ, Δⱼ, Γ).
 func (r *Sround4) VerifyMessage(msg round.Message) error {
 	from, to := msg.From, msg.To
-	body, ok := msg.Content.(*message4)
+	body, ok := msg.Content.(*Message4)
 	if !ok || body == nil {
 		return round.ErrInvalidContent
 	}
@@ -120,7 +120,7 @@ func (r *Sround4) Finalize(out []*round.Message) (round.Session, []*round.Messag
 	SigmaShare := r.Group().NewScalar().Set(R).Mul(r.ChiShare).Add(km)
 
 	// Send to all
-	out = r.BroadcastMessage(out, &broadcast5{SigmaShare: SigmaShare})
+	out = r.BroadcastMessage(out, &Broadcast5{SigmaShare: SigmaShare})
 	return &Sround5{
 		Sround4:     r,
 		SigmaShares: map[party.ID]curve.Scalar{r.SelfID(): SigmaShare},
@@ -132,21 +132,21 @@ func (r *Sround4) Finalize(out []*round.Message) (round.Session, []*round.Messag
 }
 
 // RoundNumber implements round.Content.
-func (message4) RoundNumber() round.Number { return 4 }
+func (Message4) RoundNumber() round.Number { return 4 }
 
 // MessageContent implements round.Round.
 func (r *Sround4) MessageContent() round.Content {
-	return &message4{
+	return &Message4{
 		ProofLog: zklogstar.Empty(r.Group()),
 	}
 }
 
 // RoundNumber implements round.Content.
-func (broadcast4) RoundNumber() round.Number { return 4 }
+func (Broadcast4) RoundNumber() round.Number { return 4 }
 
 // BroadcastContent implements round.BroadcastRound.
 func (r *Sround4) BroadcastContent() round.BroadcastContent {
-	return &broadcast4{
+	return &Broadcast4{
 		DeltaShare:    r.Group().NewScalar(),
 		BigDeltaShare: r.Group().NewPoint(),
 	}

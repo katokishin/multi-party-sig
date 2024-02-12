@@ -3,6 +3,8 @@ package hash
 import (
 	"bytes"
 	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -39,6 +41,31 @@ func (c Commitment) Validate() error {
 		}
 	}
 	return errors.New("commitment: commitment is 0")
+}
+
+func (c Commitment) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"Val": base64.StdEncoding.EncodeToString(c),
+	})
+}
+
+func (c *Commitment) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("hash.Commitment unmarshalJSON failed @ tmp:", e)
+		return e
+	}
+	var str string
+	if e := json.Unmarshal(tmp["Val"], &str); e != nil {
+		fmt.Println("hash.Commitment unmarshalJSON failed @ val:", e)
+		return e
+	}
+	commitment, e := base64.StdEncoding.DecodeString(str)
+	if e != nil {
+		return e
+	}
+	*c = Commitment(commitment)
+	return nil
 }
 
 // WriteTo implements the io.WriterTo interface for Decommitment.

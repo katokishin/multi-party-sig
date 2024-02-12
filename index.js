@@ -37,6 +37,7 @@ const joinMessages = (msgs1, msgs2, msgs3, to) => {
 // Get a ContKeygenResult(Handler, Config, AllReceived, Msgs)
 let aliceRes, bobRes, charlieRes = null
 let aliceContParams, bobContParams, charlieContParams = null
+let aliceConfig, bobConfig, charlieConfig = null
 keygen()
 async function keygen() {
     await aliceKeygenStart()
@@ -59,29 +60,39 @@ async function keygen() {
     await bobKeygenAdvance()
     await charlieKeygenAdvance()
     console.log("Keygen Done")
+    await sign()
 }
 
-async function aliceKeygenStart() {
+async function aliceKeygenStart(printResult = false) {
     try {
         aliceRes = JSON.parse(StartKeygenC(aliceOpts))
+        if (printResult) {
+            console.log(JSON.stringify(aliceRes))
+        }
     } catch (err) {
         console.log("index.js: ", err)
     }
     return
 }
 
-async function bobKeygenStart() {
+async function bobKeygenStart(printResult = false) {
     try {
         bobRes = JSON.parse(StartKeygenC(bobOpts))
+        if (printResult) {
+            console.log(JSON.stringify(bobRes))
+        }
     } catch (err) {
         console.log("index.js: ", err)
     }
     return
 }
 
-async function charlieKeygenStart() {
+async function charlieKeygenStart(printResult = false) {
     try {
         charlieRes = JSON.parse(StartKeygenC(charlieOpts))
+        if (printResult) {
+            console.log(JSON.stringify(charlieRes))
+        }
     } catch (err) {
         console.log("index.js: ", err)
     }
@@ -90,8 +101,9 @@ async function charlieKeygenStart() {
 
 async function aliceKeygenAdvance(printResult = false) {
     aliceRes = JSON.parse(ContKeygenC(aliceContParams))
-    if (aliceRes.ResultObj !== undefined) {
-        console.log("Result: ", JSON.stringify(aliceRes.ResultObj))
+    if (aliceRes.Config !== undefined) {
+        //console.log("Result: ", JSON.stringify(aliceRes.Config))
+        aliceConfig = aliceRes.Config
         return
     }
     if (printResult) {
@@ -100,8 +112,9 @@ async function aliceKeygenAdvance(printResult = false) {
 }
 async function bobKeygenAdvance(printResult = false) {
     bobRes = JSON.parse(ContKeygenC(bobContParams))
-    if (bobRes.ResultObj !== undefined) {
-        console.log("Result: ", JSON.stringify(bobRes.ResultObj))
+    if (bobRes.Config !== undefined) {
+        //console.log("Result: ", JSON.stringify(bobRes.Config))
+        bobConfig = bobRes.Config
         return
     }
     if (printResult) {
@@ -110,8 +123,9 @@ async function bobKeygenAdvance(printResult = false) {
 }
 async function charlieKeygenAdvance(printResult = false) {
     charlieRes = JSON.parse(ContKeygenC(charlieContParams))
-    if (charlieRes.ResultObj !== undefined) {
-        console.log("Result: ", JSON.stringify(charlieRes.ResultObj))
+    if (charlieRes.Config !== undefined) {
+        //console.log("Result: ", JSON.stringify(charlieRes.Config))
+        charlieConfig = charlieRes.Config
         return
     }
     if (printResult) {
@@ -145,14 +159,9 @@ const makeSignOptions = (participants, config, bytes, sessionId) => {
 
 //sign()
 async function sign() {
-    // Load premade config to skip to Sign execution
-    aliceRes = JSON.parse(fs.readFileSync('./aliceKey.json', 'utf8'))
-    bobRes = JSON.parse(fs.readFileSync('./bobKey.json', 'utf8'))
-    charlieRes = JSON.parse(fs.readFileSync('./charlieKey.json', 'utf8'))
-
     bytes = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,]
-    aliceOpts = makeSignOptions(['alice', 'bob'], aliceRes.Config, bytes, "dummySession")
-    bobOpts = makeSignOptions(['alice', 'bob'], bobRes.Config, bytes, "dummySession")
+    aliceOpts = makeSignOptions(['alice', 'bob'], aliceConfig, bytes, "dummySession")
+    bobOpts = makeSignOptions(['alice', 'bob'], bobConfig, bytes, "dummySession")
 
     await aliceSignStart()
     await bobSignStart()

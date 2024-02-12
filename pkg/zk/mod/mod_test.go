@@ -5,7 +5,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/cronokirby/safenum"
+	"github.com/cronokirby/saferith"
 	"github.com/fxamacker/cbor/v2"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -52,13 +52,13 @@ func TestMod(t *testing.T) {
 
 func Test_set4thRoot(t *testing.T) {
 	var p, q uint64 = 311, 331
-	pMod := safenum.ModulusFromUint64(p)
-	pHalf := new(safenum.Nat).SetUint64((p - 1) / 2)
-	qMod := safenum.ModulusFromUint64(q)
-	qHalf := new(safenum.Nat).SetUint64((q - 1) / 2)
-	n := safenum.ModulusFromUint64(p * q)
-	phi := new(safenum.Nat).SetUint64((p - 1) * (q - 1))
-	y := new(safenum.Nat).SetUint64(502)
+	pMod := saferith.ModulusFromUint64(p)
+	pHalf := new(saferith.Nat).SetUint64((p - 1) / 2)
+	qMod := saferith.ModulusFromUint64(q)
+	qHalf := new(saferith.Nat).SetUint64((q - 1) / 2)
+	n := saferith.ModulusFromUint64(p * q)
+	phi := new(saferith.Nat).SetUint64((p - 1) * (q - 1))
+	y := new(saferith.Nat).SetUint64(502)
 	w := sample.QNR(rand.Reader, n)
 
 	nCRT := arith.ModulusFromFactors(pMod.Nat(), qMod.Nat())
@@ -75,8 +75,25 @@ func Test_set4thRoot(t *testing.T) {
 	}
 
 	assert.NotEqual(t, root, big.NewInt(1), "root cannot be 1")
-	root.Exp(root, new(safenum.Nat).SetUint64(4), n)
+	root.Exp(root, new(saferith.Nat).SetUint64(4), n)
 	assert.True(t, root.Eq(y) == 1, "root^4 should be equal to y")
+}
+
+func Test_hashFix(t *testing.T) {
+	N := zk.ProverPaillierSecret.N()
+	w := sample.QNR(rand.Reader, N).Big()
+	h := hash.New()
+	es, err := challenge(h, N, w)
+	assert.NoError(t, err, "failed to compute challenge")
+
+	allEqual := true
+	for _, e := range es {
+		if !(e.Eq(es[0]) == 1) {
+			allEqual = false
+		}
+	}
+
+	assert.False(t, allEqual, "all challenges should be different")
 }
 
 var proof *Proof

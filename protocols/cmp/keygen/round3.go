@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cronokirby/safenum"
+	"github.com/cronokirby/saferith"
 	"github.com/taurusgroup/multi-party-sig/internal/jsontools"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/internal/types"
@@ -43,11 +43,11 @@ type Broadcast3 struct {
 	SchnorrCommitments *zksch.Commitment
 	ElGamalPublic      curve.Point
 	// N Paillier and Pedersen N = p•q, p ≡ q ≡ 3 mod 4
-	N *safenum.Modulus
+	N *saferith.Modulus
 	// S = r² mod N
-	S *safenum.Nat
+	S *saferith.Nat
 	// T = Sˡ mod N
-	T *safenum.Nat
+	T *saferith.Nat
 	// Decommitment = uᵢ decommitment bytes
 	Decommitment hash.Decommitment
 }
@@ -72,7 +72,7 @@ func (r *Kround3) StoreBroadcastMessage(msg round.Message) error {
 	}
 
 	// check nil
-	if body.N == nil || body.S == nil || body.T == nil || body.VSSPolynomial == nil {
+	if body.N == nil || body.S == nil || body.T == nil || body.VSSPolynomial == nil || body.SchnorrCommitments == nil {
 		fmt.Println("kr3.storebroadcastmessage: nil field(s) detected")
 		return round.ErrNilFields
 	}
@@ -328,17 +328,19 @@ func (b *Broadcast3) UnmarshalJSON(j []byte) error {
 	}
 
 	var elg curve.Point
-	if e := json.Unmarshal(tmp["ElGamalPublic"], &elg); e != nil {
+	var elg256k1 curve.Secp256k1Point
+	if e := json.Unmarshal(tmp["ElGamalPublic"], &elg256k1); e != nil {
 		fmt.Println("Broadcast3 unmarshal failed @ elg:", e)
 		return e
 	}
+	elg = &elg256k1
 
 	var nb []byte
 	if e := json.Unmarshal(tmp["N"], &nb); e != nil {
 		fmt.Println("Broadcast3 unmarshal failed @ n:", e)
 		return e
 	}
-	var n *safenum.Modulus
+	n := *&saferith.Modulus{}
 	if e := n.UnmarshalBinary(nb); e != nil {
 		fmt.Println("UnmarshalBinary failed for Broadcast3.N:", e)
 		return e
@@ -349,7 +351,7 @@ func (b *Broadcast3) UnmarshalJSON(j []byte) error {
 		fmt.Println("Broadcast3 unmarshal failed @ n:", e)
 		return e
 	}
-	var s *safenum.Modulus
+	s := *&saferith.Modulus{}
 	if e := s.UnmarshalBinary(sb); e != nil {
 		fmt.Println("UnmarshalBinary failed for Broadcast3.S:", e)
 		return e
@@ -360,7 +362,7 @@ func (b *Broadcast3) UnmarshalJSON(j []byte) error {
 		fmt.Println("Broadcast3 unmarshal failed @ n:", e)
 		return e
 	}
-	var t *safenum.Modulus
+	t := *&saferith.Modulus{}
 	if e := t.UnmarshalBinary(tb); e != nil {
 		fmt.Println("UnmarshalBinary failed for Broadcast3.T:", e)
 		return e
@@ -377,7 +379,7 @@ func (b *Broadcast3) UnmarshalJSON(j []byte) error {
 	b.VSSPolynomial = vss
 	b.SchnorrCommitments = schc
 	b.ElGamalPublic = elg
-	b.N = n
+	b.N = &n
 	b.S = s.Nat()
 	b.T = t.Nat()
 	b.Decommitment = decom

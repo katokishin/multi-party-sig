@@ -2,8 +2,9 @@ package zklogstar
 
 import (
 	"crypto/rand"
+	"encoding/json"
 
-	"github.com/cronokirby/safenum"
+	"github.com/cronokirby/saferith"
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/arith"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
@@ -30,32 +31,32 @@ type Public struct {
 
 type Private struct {
 	// X is the plaintext of C and the discrete log of X.
-	X *safenum.Int
+	X *saferith.Int
 
 	// Rho = ρ is nonce used to encrypt C.
-	Rho *safenum.Nat
+	Rho *saferith.Nat
 }
 
 type Commitment struct {
 	// S = sˣ tᵘ (mod N)
-	S *safenum.Nat
+	S *saferith.Nat
 	// A = Enc₀(alpha; r)
 	A *paillier.Ciphertext
 	// Y = α⋅G
 	Y curve.Point
 	// D = sᵃ tᵍ (mod N)
-	D *safenum.Nat
+	D *saferith.Nat
 }
 
 type Proof struct {
 	group curve.Curve
 	*Commitment
 	// Z1 = α + e x
-	Z1 *safenum.Int
+	Z1 *saferith.Int
 	// Z2 = r ρᵉ mod N
-	Z2 *safenum.Nat
+	Z2 *saferith.Nat
 	// Z3 = γ + e μ
-	Z3 *safenum.Int
+	Z3 *saferith.Int
 }
 
 func (p *Proof) IsValid(public Public) bool {
@@ -97,14 +98,14 @@ func NewProof(group curve.Curve, hash *hash.Hash, public Public, private Private
 	e, _ := challenge(hash, group, public, commitment)
 
 	// z1 = α + e x,
-	z1 := new(safenum.Int).SetInt(private.X)
+	z1 := new(saferith.Int).SetInt(private.X)
 	z1.Mul(e, z1, -1)
 	z1.Add(z1, alpha, -1)
 	// z2 = r ρᵉ mod N,
 	z2 := NModulus.ExpI(private.Rho, e)
 	z2.ModMul(z2, r, N)
 	// z3 = γ + e μ,
-	z3 := new(safenum.Int).Mul(e, mu, -1)
+	z3 := new(saferith.Int).Mul(e, mu, -1)
 	z3.Add(z3, gamma, -1)
 
 	return &Proof{
@@ -168,7 +169,134 @@ func (p Proof) Verify(hash *hash.Hash, public Public) bool {
 	return true
 }
 
-func challenge(hash *hash.Hash, group curve.Curve, public Public, commitment *Commitment) (e *safenum.Int, err error) {
+func (p Proof) MarshalJSON() ([]byte, error) {
+	z1b, e := p.Z1.MarshalBinary()
+	if e != nil {
+		return nil, e
+	}
+	z2b, e := p.Z2.MarshalBinary()
+	if e != nil {
+		return nil, e
+	}
+	z3b, e := p.Z3.MarshalBinary()
+	if e != nil {
+		return nil, e
+	}
+	return json.Marshal(map[string]interface{}{
+		"Commitment": p.Commitment,
+		"Z1":         z1b,
+		"Z2":         z2b,
+		"Z3":         z3b,
+	})
+}
+
+func (p *Proof) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		return e
+	}
+
+	var z1 = *&saferith.Int{}
+	var z2 = *&saferith.Modulus{}
+	var z3 = *&saferith.Int{}
+	z1bytes := []byte{}
+	z2bytes := []byte{}
+	z3bytes := []byte{}
+
+	if e := json.Unmarshal(tmp["Z1"], &z1bytes); e != nil {
+		return e
+	}
+	if e := json.Unmarshal(tmp["Z2"], &z2bytes); e != nil {
+		return e
+	}
+	if e := json.Unmarshal(tmp["Z3"], &z3bytes); e != nil {
+		return e
+	}
+	if e := z1.UnmarshalBinary(z1bytes); e != nil {
+		return e
+	}
+	if e := z2.UnmarshalBinary(z2bytes); e != nil {
+		return e
+	}
+	if e := z3.UnmarshalBinary(z3bytes); e != nil {
+		return e
+	}
+
+	var commitment *Commitment
+	if e := json.Unmarshal(tmp["Commitment"], &commitment); e != nil {
+		return e
+	}
+
+	p.Z1 = &z1
+	p.Z2 = z2.Nat()
+	p.Z3 = &z3
+	p.Commitment = commitment
+	p.group = curve.Secp256k1{}
+	return nil
+}
+
+func (c Commitment) MarshalJSON() ([]byte, error) {
+	sb, e := c.S.MarshalBinary()
+	if e != nil {
+		return nil, e
+	}
+	db, e := c.D.MarshalBinary()
+	if e != nil {
+		return nil, e
+	}
+	return json.Marshal(map[string]interface{}{
+		"S": sb,
+		"D": db,
+		"A": c.A,
+		"Y": c.Y,
+	})
+}
+
+func (c *Commitment) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		return e
+	}
+
+	s := *&saferith.Modulus{}
+	var sBytes []byte
+	d := *&saferith.Modulus{}
+	var dBytes []byte
+
+	if e := json.Unmarshal(tmp["S"], &sBytes); e != nil {
+		return e
+	}
+	if e := s.UnmarshalBinary(sBytes); e != nil {
+		return e
+	}
+
+	if e := json.Unmarshal(tmp["D"], &dBytes); e != nil {
+		return e
+	}
+	if e := d.UnmarshalBinary(dBytes); e != nil {
+		return e
+	}
+
+	var a *paillier.Ciphertext
+	if e := json.Unmarshal(tmp["A"], &a); e != nil {
+		return e
+	}
+
+	var y curve.Point
+	var y256k1 curve.Secp256k1Point
+	if e := json.Unmarshal(tmp["Y"], &y256k1); e != nil {
+		return e
+	}
+	y = &y256k1
+
+	c.A = a
+	c.D = d.Nat()
+	c.S = s.Nat()
+	c.Y = y
+	return nil
+}
+
+func challenge(hash *hash.Hash, group curve.Curve, public Public, commitment *Commitment) (e *saferith.Int, err error) {
 	err = hash.WriteAny(public.Aux, public.Prover, public.C, public.X, public.G,
 		commitment.S, commitment.A, commitment.Y, commitment.D)
 	e = sample.IntervalScalar(hash.Digest(), group)

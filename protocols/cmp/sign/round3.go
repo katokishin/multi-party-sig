@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cronokirby/safenum"
+	"github.com/cronokirby/saferith"
 	"github.com/taurusgroup/multi-party-sig/internal/jsontools"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
@@ -21,16 +21,16 @@ type Sround3 struct {
 	*Sround2
 
 	// DeltaShareAlpha[j] = αᵢⱼ
-	DeltaShareAlpha map[party.ID]*safenum.Int
+	DeltaShareAlpha map[party.ID]*saferith.Int
 	// DeltaShareBeta[j] = βᵢⱼ
-	DeltaShareBeta map[party.ID]*safenum.Int
+	DeltaShareBeta map[party.ID]*saferith.Int
 	// ChiShareAlpha[j] = α̂ᵢⱼ
-	ChiShareAlpha map[party.ID]*safenum.Int
+	ChiShareAlpha map[party.ID]*saferith.Int
 	// ChiShareBeta[j] = β̂ᵢⱼ
-	ChiShareBeta map[party.ID]*safenum.Int
+	ChiShareBeta map[party.ID]*saferith.Int
 }
 
-type message3 struct {
+type Message3 struct {
 	DeltaD     *paillier.Ciphertext // DeltaD = Dᵢⱼ
 	DeltaF     *paillier.Ciphertext // DeltaF = Fᵢⱼ
 	DeltaProof *zkaffg.Proof
@@ -40,7 +40,7 @@ type message3 struct {
 	ProofLog   *zklogstar.Proof
 }
 
-type broadcast3 struct {
+type Broadcast3 struct {
 	round.NormalBroadcastContent
 	BigGammaShare curve.Point // BigGammaShare = Γⱼ
 }
@@ -49,7 +49,7 @@ type broadcast3 struct {
 //
 // - store Γⱼ
 func (r *Sround3) StoreBroadcastMessage(msg round.Message) error {
-	body, ok := msg.Content.(*broadcast3)
+	body, ok := msg.Content.(*Broadcast3)
 	if !ok || body == nil {
 		return round.ErrInvalidContent
 	}
@@ -65,7 +65,7 @@ func (r *Sround3) StoreBroadcastMessage(msg round.Message) error {
 // - verify zkproofs affg (2x) zklog*.
 func (r *Sround3) VerifyMessage(msg round.Message) error {
 	from, to := msg.From, msg.To
-	body, ok := msg.Content.(*message3)
+	body, ok := msg.Content.(*Message3)
 	if !ok || body == nil {
 		fmt.Println("Sround3.VerifyMessage Error: invalid message content")
 		return round.ErrInvalidContent
@@ -115,7 +115,7 @@ func (r *Sround3) VerifyMessage(msg round.Message) error {
 // - Decrypt MtA shares,
 // - save αᵢⱼ, α̂ᵢⱼ.
 func (r *Sround3) StoreMessage(msg round.Message) error {
-	from, body := msg.From, msg.Content.(*message3)
+	from, body := msg.From, msg.Content.(*Message3)
 
 	// αᵢⱼ
 	DeltaShareAlpha, err := r.SecretPaillier.Dec(body.DeltaD)
@@ -152,10 +152,10 @@ func (r *Sround3) Finalize(out []*round.Message) (round.Session, []*round.Messag
 	BigDeltaShare := r.KShare.Act(Gamma)
 
 	// δᵢ = γᵢ kᵢ
-	DeltaShare := new(safenum.Int).Mul(r.GammaShare, KShareInt, -1)
+	DeltaShare := new(saferith.Int).Mul(r.GammaShare, KShareInt, -1)
 
 	// χᵢ = xᵢ kᵢ
-	ChiShare := new(safenum.Int).Mul(curve.MakeInt(r.SecretECDSA), KShareInt, -1)
+	ChiShare := new(saferith.Int).Mul(curve.MakeInt(r.SecretECDSA), KShareInt, -1)
 
 	for _, j := range r.OtherPartyIDs() {
 		//δᵢ += αᵢⱼ + βᵢⱼ
@@ -173,7 +173,7 @@ func (r *Sround3) Finalize(out []*round.Message) (round.Session, []*round.Messag
 	}
 
 	DeltaShareScalar := r.Group().NewScalar().SetNat(DeltaShare.Mod(r.Group().Order()))
-	out = r.BroadcastMessage(out, &broadcast4{
+	out = r.BroadcastMessage(out, &Broadcast4{
 		DeltaShare:    DeltaShareScalar,
 		BigDeltaShare: BigDeltaShare,
 	})
@@ -190,7 +190,7 @@ func (r *Sround3) Finalize(out []*round.Message) (round.Session, []*round.Messag
 			Aux:    r.Pedersen[j],
 		}, zkPrivate)
 
-		out = r.SendMessage(out, &message4{
+		out = r.SendMessage(out, &Message4{
 			ProofLog: proofLog,
 		}, j)
 		return nil
@@ -211,11 +211,11 @@ func (r *Sround3) Finalize(out []*round.Message) (round.Session, []*round.Messag
 }
 
 // RoundNumber implements round.Content.
-func (message3) RoundNumber() round.Number { return 3 }
+func (Message3) RoundNumber() round.Number { return 3 }
 
 // MessageContent implements round.Round.
 func (r *Sround3) MessageContent() round.Content {
-	return &message3{
+	return &Message3{
 		ProofLog:   zklogstar.Empty(r.Group()),
 		DeltaProof: zkaffg.Empty(r.Group()),
 		ChiProof:   zkaffg.Empty(r.Group()),
@@ -223,11 +223,11 @@ func (r *Sround3) MessageContent() round.Content {
 }
 
 // RoundNumber implements round.Content.
-func (broadcast3) RoundNumber() round.Number { return 3 }
+func (Broadcast3) RoundNumber() round.Number { return 3 }
 
 // BroadcastContent implements round.BroadcastRound.
 func (r *Sround3) BroadcastContent() round.BroadcastContent {
-	return &broadcast3{
+	return &Broadcast3{
 		BigGammaShare: r.Group().NewPoint(),
 	}
 }
@@ -279,7 +279,7 @@ func (r *Sround3) UnmarshalJSON(j []byte) error {
 	}
 	r.Sround2 = r2
 
-	deltasalpha := make(map[party.ID]*safenum.Int)
+	deltasalpha := make(map[party.ID]*saferith.Int)
 	if err := json.Unmarshal(tmp["DeltaShareAlpha"], &deltasalpha); err != nil {
 		fmt.Println("sr3 unmarshal failed @ deltaShareAlpha:", err)
 		return err
@@ -287,14 +287,14 @@ func (r *Sround3) UnmarshalJSON(j []byte) error {
 	r.DeltaShareAlpha = deltasalpha
 
 	deltasbetaBytes := make(map[party.ID][]byte)
-	deltasbeta := make(map[party.ID]*safenum.Int)
+	deltasbeta := make(map[party.ID]*saferith.Int)
 	if err := json.Unmarshal(tmp["DeltaShareBeta"], &deltasbetaBytes); err != nil {
 		fmt.Println("sr3 unmarshal failed @ deltaShareBeta:", err)
 		return err
 	}
 	for k, v := range deltasbetaBytes {
 		v := v
-		share := *&safenum.Int{}
+		share := *&saferith.Int{}
 		err := share.UnmarshalBinary(v)
 		if err != nil {
 			fmt.Println("sr3 unmarshal failed @ deltasbetaBytes:", err)
@@ -304,7 +304,7 @@ func (r *Sround3) UnmarshalJSON(j []byte) error {
 	}
 	r.DeltaShareBeta = deltasbeta
 
-	chisalpha := make(map[party.ID]*safenum.Int)
+	chisalpha := make(map[party.ID]*saferith.Int)
 	if err := json.Unmarshal(tmp["ChiShareAlpha"], &chisalpha); err != nil {
 		fmt.Println("sr3 unmarshal failed @ chiShareAlpha:", err)
 		return err
@@ -312,14 +312,14 @@ func (r *Sround3) UnmarshalJSON(j []byte) error {
 	r.ChiShareAlpha = chisalpha
 
 	chisbetaBytes := make(map[party.ID][]byte)
-	chisbeta := make(map[party.ID]*safenum.Int)
+	chisbeta := make(map[party.ID]*saferith.Int)
 	if err := json.Unmarshal(tmp["ChiShareBeta"], &chisbetaBytes); err != nil {
 		fmt.Println("sr3 unmarshal failed @ chiShareBeta:", err)
 		return err
 	}
 	for k, v := range chisbetaBytes {
 		v := v
-		share := *&safenum.Int{}
+		share := *&saferith.Int{}
 		err := share.UnmarshalBinary(v)
 		if err != nil {
 			fmt.Println("sr3 unmarshal failed @ chisbetaBytes:", err)
@@ -329,5 +329,87 @@ func (r *Sround3) UnmarshalJSON(j []byte) error {
 	}
 	r.ChiShareBeta = chisbeta
 
+	return nil
+}
+
+func (m Message3) MarshalJSON() ([]byte, error) {
+	j, _ := json.Marshal(map[string]interface{}{
+		"DeltaD":     m.DeltaD,
+		"DeltaF":     m.DeltaF,
+		"DeltaProof": m.DeltaProof,
+		"ChiD":       m.ChiD,
+		"ChiF":       m.ChiF,
+		"ChiProof":   m.ChiProof,
+		"ProofLog":   m.ProofLog,
+	})
+	return j, nil
+}
+
+func (m *Message3) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		return e
+	}
+
+	var deltaD *paillier.Ciphertext
+	var deltaF *paillier.Ciphertext
+	var chiD *paillier.Ciphertext
+	var chiF *paillier.Ciphertext
+	var deltaProof *zkaffg.Proof
+	var chiProof *zkaffg.Proof
+	var proofLog *zklogstar.Proof
+
+	if e := json.Unmarshal(tmp["DeltaD"], &deltaD); e != nil {
+		return e
+	}
+	if e := json.Unmarshal(tmp["DeltaF"], &deltaF); e != nil {
+		return e
+	}
+	if e := json.Unmarshal(tmp["ChiD"], &chiD); e != nil {
+		return e
+	}
+	if e := json.Unmarshal(tmp["ChiF"], &chiF); e != nil {
+		return e
+	}
+	if e := json.Unmarshal(tmp["DeltaProof"], &deltaProof); e != nil {
+		return e
+	}
+	if e := json.Unmarshal(tmp["ChiProof"], &chiProof); e != nil {
+		return e
+	}
+	if e := json.Unmarshal(tmp["ProofLog"], &proofLog); e != nil {
+		return e
+	}
+
+	m.DeltaD = deltaD
+	m.DeltaF = deltaF
+	m.ChiD = chiD
+	m.ChiF = chiF
+	m.DeltaProof = deltaProof
+	m.ChiProof = chiProof
+	m.ProofLog = proofLog
+	return nil
+}
+
+func (m Broadcast3) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"BigGammaShare": m.BigGammaShare,
+	})
+}
+
+func (m *Broadcast3) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		return e
+	}
+
+	var bgs curve.Point
+	var bgs256k1 curve.Secp256k1Point
+	if e := json.Unmarshal(tmp["BigGammaShare"], &bgs256k1); e != nil {
+		return e
+	}
+	bgs = &bgs256k1
+
+	m.BigGammaShare = bgs
 	return nil
 }

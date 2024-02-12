@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cronokirby/safenum"
+	"github.com/cronokirby/saferith"
 	"github.com/taurusgroup/multi-party-sig/internal/jsontools"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/internal/types"
@@ -111,9 +111,9 @@ func (r *Kround1) Finalize(out []*round.Message) (round.Session, []*round.Messag
 		ShareReceived:  map[party.ID]curve.Scalar{r.SelfID(): SelfShare},
 		ElGamalPublic:  map[party.ID]curve.Point{r.SelfID(): ElGamalPublic},
 		PaillierPublic: map[party.ID]*paillier.PublicKey{r.SelfID(): SelfPaillierPublic},
-		NModulus:       map[party.ID]*safenum.Modulus{r.SelfID(): SelfPedersenPublic.N()},
-		S:              map[party.ID]*safenum.Nat{r.SelfID(): SelfPedersenPublic.S()},
-		T:              map[party.ID]*safenum.Nat{r.SelfID(): SelfPedersenPublic.T()},
+		NModulus:       map[party.ID]*saferith.Modulus{r.SelfID(): SelfPedersenPublic.N()},
+		S:              map[party.ID]*saferith.Nat{r.SelfID(): SelfPedersenPublic.S()},
+		T:              map[party.ID]*saferith.Nat{r.SelfID(): SelfPedersenPublic.T()},
 		ElGamalSecret:  ElGamalSecret,
 		PaillierSecret: PaillierSecret,
 		PedersenSecret: PedersenSecret,

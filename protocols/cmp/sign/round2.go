@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cronokirby/safenum"
+	"github.com/cronokirby/saferith"
 	"github.com/taurusgroup/multi-party-sig/internal/jsontools"
 	"github.com/taurusgroup/multi-party-sig/internal/mta"
 	"github.com/taurusgroup/multi-party-sig/internal/round"
@@ -30,19 +30,19 @@ type Sround2 struct {
 	BigGammaShare map[party.ID]curve.Point
 
 	// GammaShare = γᵢ <- 𝔽
-	GammaShare *safenum.Int
+	GammaShare *saferith.Int
 	// KShare = kᵢ  <- 𝔽
 	KShare curve.Scalar
 
 	// KNonce = ρᵢ <- ℤₙ
 	// used to encrypt Kᵢ = Encᵢ(kᵢ)
-	KNonce *safenum.Nat
+	KNonce *saferith.Nat
 	// GNonce = νᵢ <- ℤₙ
 	// used to encrypt Gᵢ = Encᵢ(γᵢ)
-	GNonce *safenum.Nat
+	GNonce *saferith.Nat
 }
 
-type broadcast2 struct {
+type Broadcast2 struct {
 	round.ReliableBroadcastContent
 	// K = Kᵢ
 	K *paillier.Ciphertext
@@ -50,7 +50,7 @@ type broadcast2 struct {
 	G *paillier.Ciphertext
 }
 
-type message2 struct {
+type Message2 struct {
 	ProofEnc *zkenc.Proof
 }
 
@@ -59,7 +59,7 @@ type message2 struct {
 // - store Kⱼ, Gⱼ.
 func (r *Sround2) StoreBroadcastMessage(msg round.Message) error {
 	from := msg.From
-	body, ok := msg.Content.(*broadcast2)
+	body, ok := msg.Content.(*Broadcast2)
 	if !ok || body == nil {
 		return round.ErrInvalidContent
 	}
@@ -79,12 +79,14 @@ func (r *Sround2) StoreBroadcastMessage(msg round.Message) error {
 // - verify zkenc(Kⱼ).
 func (r *Sround2) VerifyMessage(msg round.Message) error {
 	from, to := msg.From, msg.To
-	body, ok := msg.Content.(*message2)
+	body, ok := msg.Content.(*Message2)
 	if !ok || body == nil {
+		fmt.Println("Invalid round content")
 		return round.ErrInvalidContent
 	}
 
 	if body.ProofEnc == nil {
+		fmt.Println("Nil fields detected")
 		return round.ErrNilFields
 	}
 
@@ -107,15 +109,15 @@ func (Sround2) StoreMessage(round.Message) error { return nil }
 //
 // - compute Hash(ssid, K₁, G₁, …, Kₙ, Gₙ).
 func (r *Sround2) Finalize(out []*round.Message) (round.Session, []*round.Message, error) {
-	out = r.BroadcastMessage(out, &broadcast3{
+	out = r.BroadcastMessage(out, &Broadcast3{
 		BigGammaShare: r.BigGammaShare[r.SelfID()],
 	})
 
 	otherIDs := r.OtherPartyIDs()
 	type mtaOut struct {
 		err       error
-		DeltaBeta *safenum.Int
-		ChiBeta   *safenum.Int
+		DeltaBeta *saferith.Int
+		ChiBeta   *saferith.Int
 	}
 	mtaOuts := r.Pool.Parallelize(len(otherIDs), func(i int) interface{} {
 		j := otherIDs[i]
@@ -137,7 +139,7 @@ func (r *Sround2) Finalize(out []*round.Message) (round.Session, []*round.Messag
 				X:   r.GammaShare,
 				Rho: r.GNonce,
 			})
-		out = r.SendMessage(out, &message3{
+		out = r.SendMessage(out, &Message3{
 			DeltaD:     DeltaD,
 			DeltaF:     DeltaF,
 			DeltaProof: DeltaProof,
@@ -152,8 +154,8 @@ func (r *Sround2) Finalize(out []*round.Message) (round.Session, []*round.Messag
 			ChiBeta:   ChiBeta,
 		}
 	})
-	DeltaShareBetas := make(map[party.ID]*safenum.Int, len(otherIDs)-1)
-	ChiShareBetas := make(map[party.ID]*safenum.Int, len(otherIDs)-1)
+	DeltaShareBetas := make(map[party.ID]*saferith.Int, len(otherIDs)-1)
+	ChiShareBetas := make(map[party.ID]*saferith.Int, len(otherIDs)-1)
 	for idx, mtaOutRaw := range mtaOuts {
 		j := otherIDs[idx]
 		m := mtaOutRaw.(mtaOut)
@@ -168,22 +170,22 @@ func (r *Sround2) Finalize(out []*round.Message) (round.Session, []*round.Messag
 		Sround2:         r,
 		DeltaShareBeta:  DeltaShareBetas,
 		ChiShareBeta:    ChiShareBetas,
-		DeltaShareAlpha: map[party.ID]*safenum.Int{},
-		ChiShareAlpha:   map[party.ID]*safenum.Int{},
+		DeltaShareAlpha: map[party.ID]*saferith.Int{},
+		ChiShareAlpha:   map[party.ID]*saferith.Int{},
 	}, out, nil
 }
 
 // RoundNumber implements round.Content.
-func (message2) RoundNumber() round.Number { return 2 }
+func (Message2) RoundNumber() round.Number { return 2 }
 
 // MessageContent implements round.Round.
-func (Sround2) MessageContent() round.Content { return &message2{} }
+func (Sround2) MessageContent() round.Content { return &Message2{} }
 
 // RoundNumber implements round.Content.
-func (broadcast2) RoundNumber() round.Number { return 2 }
+func (Broadcast2) RoundNumber() round.Number { return 2 }
 
 // BroadcastContent implements round.BroadcastRound.
-func (Sround2) BroadcastContent() round.BroadcastContent { return &broadcast2{} }
+func (Sround2) BroadcastContent() round.BroadcastContent { return &Broadcast2{} }
 
 // Number implements round.Round.
 func (Sround2) Number() round.Number { return 2 }
@@ -311,7 +313,7 @@ func (r *Sround2) UnmarshalJSON(j []byte) error {
 	r.BigGammaShare = biggammas
 
 	var gammashareBytes []byte
-	gammashare := *&safenum.Int{}
+	gammashare := *&saferith.Int{}
 	if err := json.Unmarshal(tmp["GammaShare"], &gammashareBytes); err != nil {
 		fmt.Println("sr2 unmarshal failed @ GammaShare:", err)
 		return err
@@ -332,7 +334,7 @@ func (r *Sround2) UnmarshalJSON(j []byte) error {
 	r.KShare = kshare
 
 	var knonceBytes []byte
-	knonce := *&safenum.Modulus{}
+	knonce := *&saferith.Modulus{}
 	if err := json.Unmarshal(tmp["KNonce"], &knonceBytes); err != nil {
 		fmt.Println("sr2 unmarshal failed @ knonce:", err)
 		return err
@@ -344,7 +346,7 @@ func (r *Sround2) UnmarshalJSON(j []byte) error {
 	r.KNonce = knonce.Nat()
 
 	var gnonceBytes []byte
-	gnonce := *&safenum.Modulus{}
+	gnonce := *&saferith.Modulus{}
 	if err := json.Unmarshal(tmp["GNonce"], &gnonceBytes); err != nil {
 		fmt.Println("sr2 unmarshal failed @ gnonce:", err)
 		return err
@@ -355,5 +357,52 @@ func (r *Sround2) UnmarshalJSON(j []byte) error {
 	}
 	r.GNonce = gnonce.Nat()
 
+	return nil
+}
+
+func (m *Broadcast2) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("broadcast2 unmarhsal failed @ tmp:", e)
+		return e
+	}
+
+	var k *paillier.Ciphertext
+	if e := json.Unmarshal(tmp["K"], &k); e != nil {
+		fmt.Println("broadcast2 unmarhsal failed @ k:", e)
+		return e
+	}
+
+	var g *paillier.Ciphertext
+	if e := json.Unmarshal(tmp["G"], &g); e != nil {
+		fmt.Println("broadcast2 unmarhsal failed @ g:", e)
+		return e
+	}
+
+	m.K = k
+	m.G = g
+	return nil
+}
+
+func (m Message2) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"ProofEnc": m.ProofEnc,
+	})
+}
+
+func (m *Message2) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("message2 unmarhsal failed @ tmp:", e)
+		return e
+	}
+
+	var proof *zkenc.Proof
+	if e := json.Unmarshal(tmp["ProofEnc"], &proof); e != nil {
+		fmt.Println("message2 unmarhsal failed @ proof:", e)
+		return e
+	}
+
+	m.ProofEnc = proof
 	return nil
 }

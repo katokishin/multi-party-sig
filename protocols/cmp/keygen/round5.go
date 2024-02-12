@@ -111,3 +111,26 @@ func (r *Kround5) UnmarshalJSON(j []byte) error {
 	r.UpdatedConfig = &upc
 	return nil
 }
+
+func (m Broadcast5) MarshalJSON() ([]byte, error) {
+	return json.Marshal(map[string]interface{}{
+		"SchnorrResponse": m.SchnorrResponse,
+	})
+}
+
+func (m *Broadcast5) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	if e := json.Unmarshal(j, &tmp); e != nil {
+		fmt.Println("Broadcast5 unmarshal failed @ tmp:", e)
+		return e
+	}
+
+	var schr *sch.Response
+	if e := json.Unmarshal(tmp["SchnorrResponse"], &schr); e != nil {
+		fmt.Println("Broadcast5 unmarshal failed @ schr:", e)
+		return e
+	}
+
+	m.SchnorrResponse = schr
+	return nil
+}

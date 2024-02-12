@@ -176,6 +176,10 @@ func (r *Kround4) Finalize(out []*round.Message) (round.Session, []*round.Messag
 		ChainKey:  r.ChainKey.Copy(),
 		Public:    PublicData,
 	}
+	publicPt := UpdatedConfig.PublicPoint()
+	publicPt.(*curve.Secp256k1Point).ToAffine()
+	compressed := publicPt.(*curve.Secp256k1Point).Compress()
+	UpdatedConfig.PublicPt = compressed
 
 	// write new ssid to hash, to bind the Schnorr proof to this new config
 	// Write SSID, selfID to temporary hash
