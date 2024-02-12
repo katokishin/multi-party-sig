@@ -2,7 +2,6 @@
   "dependencies": {
     "ffi-napi": "^4.0.3",
     "koffi": "^2.7.2",
-    "ref-napi": "^3.0.3",
-    "wasi": "^0.0.6"
+    "ref-napi": "^3.0.3"
   }
 }
