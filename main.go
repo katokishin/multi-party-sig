@@ -56,7 +56,6 @@ func (p *ContKeygenParams) UnmarshalJSON(j []byte) error {
 	if e != nil {
 		return e
 	}
-	// fmt.Println(tmp["Handler"])
 
 	var h protocol.MultiHandler
 	if err := json.Unmarshal(tmp["Handler"], &h); err != nil {
@@ -557,7 +556,6 @@ after_cr_judgement:
 				return nil, err
 			}
 			if tmpRd["VSSSecret"] != nil {
-				fmt.Println("It's a Kround1!")
 				if err := json.Unmarshal(r, &rdsK1); err != nil {
 					fmt.Println("Unmarshaling Kround1 failed", err)
 					return nil, err
@@ -570,7 +568,6 @@ after_cr_judgement:
 				rdsK1.Helper = &rdHelper
 				rounds[1] = &rdsK1
 			} else if tmpRd["ECDSA"] != nil {
-				fmt.Println("It's a Sround1!")
 				if err := json.Unmarshal(r, &rdsS1); err != nil {
 					fmt.Println(err)
 					return nil, err
@@ -590,14 +587,12 @@ after_cr_judgement:
 				return nil, err
 			}
 			if tmpRd["VSSPolynomials"] != nil {
-				fmt.Println("It's a Kround2!")
 				if err := json.Unmarshal(r, &rdsK2); err != nil {
 					fmt.Println(err)
 					return nil, err
 				}
 				rounds[2] = &rdsK2
 			} else if tmpRd["GammaShare"] != nil {
-				fmt.Println("It's a Sround2!")
 				if err := json.Unmarshal(r, &rdsS2); err != nil {
 					fmt.Println(err)
 					return nil, err
@@ -611,14 +606,12 @@ after_cr_judgement:
 				return nil, err
 			}
 			if tmpRd["SchnorrCommitments"] != nil {
-				fmt.Println("It's a Kround3!")
 				if err := json.Unmarshal(r, &rdsK3); err != nil {
 					fmt.Println("Could not unmarshal Kround3", err)
 					return nil, err
 				}
 				rounds[3] = &rdsK3
 			} else if tmpRd["DeltaShareAlpha"] != nil {
-				fmt.Println("It's a Sround3!")
 				if err := json.Unmarshal(r, &rdsS3); err != nil {
 					fmt.Println(err)
 					return nil, err
@@ -632,14 +625,12 @@ after_cr_judgement:
 				return nil, err
 			}
 			if tmpRd["ChainKey"] != nil {
-				fmt.Println("It's a Kround4!")
 				if err := json.Unmarshal(r, &rdsK4); err != nil {
 					fmt.Println(err)
 					return nil, err
 				}
 				rounds[4] = &rdsK4
 			} else if tmpRd["DeltaShares"] != nil {
-				fmt.Println("It's a Sround4!")
 				if err := json.Unmarshal(r, &rdsS4); err != nil {
 					fmt.Println(err)
 					return nil, err
@@ -653,14 +644,12 @@ after_cr_judgement:
 				return nil, err
 			}
 			if tmpRd["UpdatedConfig"] != nil {
-				fmt.Println("It's a Kround5!")
 				if err := json.Unmarshal(r, &rdsK5); err != nil {
 					fmt.Println(err)
 					return nil, err
 				}
 				rounds[5] = &rdsK5
 			} else if tmpRd["SigmaShares"] != nil {
-				fmt.Println("It's a Sround5!")
 				if err := json.Unmarshal(r, &rdsS5); err != nil {
 					fmt.Println(err)
 					return nil, err

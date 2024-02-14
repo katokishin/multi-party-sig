@@ -32,7 +32,7 @@ func (sig Signature) Verify(X curve.Point, hash []byte) bool {
 	return R2.Equal(sig.R)
 }
 
-// get a signature in ethereum format
+// get a signature in ethereum format (R, S, yParity -- no longer R, S, V)
 func (sig Signature) SigEthereum() ([]byte, error) {
 	IsOverHalfOrder := sig.S.IsOverHalfOrder() // s-values greater than secp256k1n/2 are considered invalid
 
@@ -53,19 +53,10 @@ func (sig Signature) SigEthereum() ([]byte, error) {
 	rs = append(rs, r...)
 	rs = append(rs, s...)
 
-	if IsOverHalfOrder {
-		v := rs[0] - 2 // Convert to Ethereum signature format with 'recovery id' v at the end.
-		copy(rs, rs[1:])
-		rs[64] = v ^ 1
+	if sig.R.(*curve.Secp256k1Point).HasEvenY() {
+		rs = append(rs, []byte{0x00}...)
 	} else {
-		v := rs[0] - 2
-		copy(rs, rs[1:])
-		rs[64] = v
-	}
-
-	r[0] = rs[64] + 2
-	if err := sig.R.UnmarshalBinary(r); err != nil {
-		return nil, err
+		rs = append(rs, []byte{0x01}...)
 	}
 
 	return rs, nil
