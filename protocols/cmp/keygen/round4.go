@@ -12,7 +12,7 @@ import (
 	"github.com/taurusgroup/multi-party-sig/pkg/math/polynomial"
 	"github.com/taurusgroup/multi-party-sig/pkg/paillier"
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
-	"github.com/taurusgroup/multi-party-sig/pkg/pedersen"
+	zkfac "github.com/taurusgroup/multi-party-sig/pkg/zk/fac"
 	zkmod "github.com/taurusgroup/multi-party-sig/pkg/zk/mod"
 	zkprm "github.com/taurusgroup/multi-party-sig/pkg/zk/prm"
 	"github.com/taurusgroup/multi-party-sig/protocols/cmp/config"
@@ -33,12 +33,14 @@ type Kround4 struct {
 type Message4 struct {
 	// Share = Encᵢ(x) is the encryption of the receivers share
 	Share *paillier.Ciphertext
+	Fac   *zkfac.Proof
 }
 
 type Broadcast4 struct {
 	round.NormalBroadcastContent
 	Mod *zkmod.Proof
 	Prm *zkprm.Proof
+	Fac *zkfac.Proof
 }
 
 // StoreBroadcastMessage implements round.BroadcastRound.
@@ -53,13 +55,13 @@ func (r *Kround4) StoreBroadcastMessage(msg round.Message) error {
 	}
 
 	// verify zkmod
-	if !body.Mod.Verify(zkmod.Public{N: r.NModulus[from]}, r.HashForID(from), nil) {
+	if !body.Mod.Verify(zkmod.Public{N: r.Pedersen[from].N()}, r.HashForID(from), nil) {
 		fmt.Printf("Kr4.StoreBroadcastMessage(): Failed to validate zkmod\n")
 		return errors.New("failed to validate mod proof")
 	}
 
 	// verify zkprm
-	if !body.Prm.Verify(zkprm.Public{N: r.NModulus[from], S: r.S[from], T: r.T[from]}, r.HashForID(from), nil) {
+	if !body.Prm.Verify(zkprm.Public{Aux: r.Pedersen[from]}, r.HashForID(from), nil) {
 		fmt.Printf("Kr4.StoreBroadcastMessage(): Failed to validate zkprm\n")
 		return errors.New("failed to validate prm proof")
 	}
@@ -70,6 +72,7 @@ func (r *Kround4) StoreBroadcastMessage(msg round.Message) error {
 //
 // - verify validity of share ciphertext.
 func (r *Kround4) VerifyMessage(msg round.Message) error {
+	from := msg.From
 	body, ok := msg.Content.(*Message4)
 	if !ok || body == nil {
 		return round.ErrInvalidContent
@@ -78,6 +81,12 @@ func (r *Kround4) VerifyMessage(msg round.Message) error {
 	if !r.PaillierPublic[msg.To].ValidateCiphertexts(body.Share) {
 		fmt.Printf("Kr4 VerifyMessage() failed; invalid ciphertext\n")
 		return errors.New("invalid ciphertext")
+	}
+
+	// verify zkfac
+	if !body.Fac.Verify(zkfac.Public{N: r.PaillierPublic[from].N(), Aux: r.Pedersen[msg.To]}, r.HashForID(from)) {
+		fmt.Printf("Kr4 VerifyMessage() failed; failed to validate fac proof\n")
+		return errors.New("failed to validate fac proof")
 	}
 
 	return nil
@@ -161,7 +170,7 @@ func (r *Kround4) Finalize(out []*round.Message) (round.Session, []*round.Messag
 			ECDSA:    PublicECDSAShare,
 			ElGamal:  r.ElGamalPublic[j],
 			Paillier: r.PaillierPublic[j],
-			Pedersen: pedersen.New(r.PaillierPublic[j].Modulus(), r.S[j], r.T[j]),
+			Pedersen: r.Pedersen[j],
 		}
 	}
 
@@ -260,6 +269,7 @@ func (r *Kround4) UnmarshalJSON(j []byte) error {
 func (m Message4) MarshalJSON() ([]byte, error) {
 	return json.Marshal(map[string]interface{}{
 		"Share": m.Share,
+		"Fac":   m.Fac,
 	})
 }
 
@@ -276,7 +286,14 @@ func (m *Message4) UnmarshalJSON(j []byte) error {
 		return e
 	}
 
+	var fac *zkfac.Proof
+	if e := json.Unmarshal(tmp["Fac"], &fac); e != nil {
+		fmt.Println("Message4 unmarshal failed @ zkfac:", e)
+		return e
+	}
+
 	m.Share = sh
+	m.Fac = fac
 	return nil
 }
 

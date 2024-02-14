@@ -10,11 +10,13 @@ import (
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/internal/types"
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
+	"github.com/taurusgroup/multi-party-sig/pkg/math/arith"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/polynomial"
 	"github.com/taurusgroup/multi-party-sig/pkg/paillier"
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
 	"github.com/taurusgroup/multi-party-sig/pkg/pedersen"
+	zkfac "github.com/taurusgroup/multi-party-sig/pkg/zk/fac"
 	zkmod "github.com/taurusgroup/multi-party-sig/pkg/zk/mod"
 	zkprm "github.com/taurusgroup/multi-party-sig/pkg/zk/prm"
 	zksch "github.com/taurusgroup/multi-party-sig/pkg/zk/sch"
@@ -124,9 +126,7 @@ func (r *Kround3) StoreBroadcastMessage(msg round.Message) error {
 	}
 	r.RIDs[from] = body.RID
 	r.ChainKeys[from] = body.C
-	r.NModulus[from] = body.N
-	r.S[from] = body.S
-	r.T[from] = body.T
+	r.Pedersen[from] = pedersen.New(arith.ModulusFromN(body.N), body.S, body.T)
 	r.PaillierPublic[from] = paillier.NewPublicKey(body.N)
 	r.VSSPolynomials[from] = body.VSSPolynomial
 	r.SchnorrCommitments[from] = body.SchnorrCommitments
@@ -174,7 +174,7 @@ func (r *Kround3) Finalize(out []*round.Message) (round.Session, []*round.Messag
 		P:   r.PaillierSecret.P(),
 		Q:   r.PaillierSecret.Q(),
 		Phi: r.PaillierSecret.Phi(),
-	}, zkmod.Public{N: r.NModulus[r.SelfID()]}, nil)
+	}, zkmod.Public{N: r.PaillierPublic[r.SelfID()].N()}, nil)
 
 	// prove s, t are correct as aux parameters with zkprm
 	prm := zkprm.NewProof(zkprm.Private{
@@ -182,15 +182,20 @@ func (r *Kround3) Finalize(out []*round.Message) (round.Session, []*round.Messag
 		Phi:    r.PaillierSecret.Phi(),
 		P:      r.PaillierSecret.P(),
 		Q:      r.PaillierSecret.Q(),
-	}, h.Clone(), zkprm.Public{N: r.NModulus[r.SelfID()], S: r.S[r.SelfID()], T: r.T[r.SelfID()]}, nil)
+	}, h.Clone(), zkprm.Public{Aux: r.Pedersen[r.SelfID()]}, nil)
 
 	out = r.BroadcastMessage(out, &Broadcast4{
 		Mod: mod,
 		Prm: prm,
 	})
 
-	// create messages with encrypted shares
+	// create P2P messages with encrypted shares and zkfac proof
 	for _, j := range r.OtherPartyIDs() {
+		// Prove that the factors of N are relatively large
+		fac := zkfac.NewProof(zkfac.Private{P: r.PaillierSecret.P(), Q: r.PaillierSecret.Q()}, h.Clone(), zkfac.Public{
+			N:   r.PaillierPublic[r.SelfID()].N(),
+			Aux: r.Pedersen[j],
+		})
 		// compute fᵢ(j)
 		share := r.VSSSecret.Evaluate(j.Scalar(r.Group()))
 		// Encrypt share
@@ -198,6 +203,7 @@ func (r *Kround3) Finalize(out []*round.Message) (round.Session, []*round.Messag
 
 		out = r.SendMessage(out, &Message4{
 			Share: C,
+			Fac:   fac,
 		}, j)
 	}
 

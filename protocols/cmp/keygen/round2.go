@@ -10,10 +10,12 @@ import (
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/internal/types"
 	"github.com/taurusgroup/multi-party-sig/pkg/hash"
+	"github.com/taurusgroup/multi-party-sig/pkg/math/arith"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/curve"
 	"github.com/taurusgroup/multi-party-sig/pkg/math/polynomial"
 	"github.com/taurusgroup/multi-party-sig/pkg/paillier"
 	"github.com/taurusgroup/multi-party-sig/pkg/party"
+	"github.com/taurusgroup/multi-party-sig/pkg/pedersen"
 	zksch "github.com/taurusgroup/multi-party-sig/pkg/zk/sch"
 )
 
@@ -41,10 +43,8 @@ type Kround2 struct {
 	// PaillierPublic[j] = Nⱼ
 	PaillierPublic map[party.ID]*paillier.PublicKey
 
-	// NModulus[j] = Nⱼ
-	NModulus map[party.ID]*saferith.Modulus
-	// S[j], T[j] = sⱼ, tⱼ
-	S, T map[party.ID]*saferith.Nat
+	// Pedersen[j] = (Nⱼ,Sⱼ,Tⱼ)
+	Pedersen map[party.ID]*pedersen.Parameters
 
 	ElGamalSecret curve.Scalar
 
@@ -100,9 +100,9 @@ func (r *Kround2) Finalize(out []*round.Message) (round.Session, []*round.Messag
 		VSSPolynomial:      r.VSSPolynomials[r.SelfID()],
 		SchnorrCommitments: r.SchnorrRand.Commitment(),
 		ElGamalPublic:      r.ElGamalPublic[r.SelfID()],
-		N:                  r.NModulus[r.SelfID()],
-		S:                  r.S[r.SelfID()],
-		T:                  r.T[r.SelfID()],
+		N:                  r.Pedersen[r.SelfID()].N(),
+		S:                  r.Pedersen[r.SelfID()].S(),
+		T:                  r.Pedersen[r.SelfID()].T(),
 		Decommitment:       r.Decommitment,
 	})
 	return &Kround3{
@@ -128,16 +128,12 @@ func (Kround2) Number() round.Number { return 2 }
 
 func (r Kround2) MarshalJSON() ([]byte, error) {
 	nmods := make(map[party.ID][]byte)
-	for id, nmod := range r.NModulus {
-		nmods[id] = nmod.Bytes()
-	}
 	ss := make(map[party.ID][]byte)
-	for id, s := range r.S {
-		ss[id] = s.Bytes()
-	}
 	ts := make(map[party.ID][]byte)
-	for id, t := range r.T {
-		ts[id] = t.Bytes()
+	for id, ped := range r.Pedersen {
+		nmods[id] = ped.N().Bytes()
+		ss[id] = ped.S().Bytes()
+		ts[id] = ped.T().Bytes()
 	}
 	cs := make(map[party.ID]string)
 	for id, c := range r.Commitments {
@@ -279,7 +275,7 @@ func (r *Kround2) UnmarshalJSON(j []byte) error {
 	}
 	r.PaillierPublic = paillierpub
 
-	nmod := make(map[party.ID]*saferith.Modulus)
+	nmod := make(map[party.ID]*arith.Modulus)
 	nmodBytes := make(map[party.ID][]byte)
 	if err := json.Unmarshal(tmp["NModulus"], &nmodBytes); err != nil {
 		fmt.Println("kr2 unmarshal failed @ nmod:", err)
@@ -287,10 +283,9 @@ func (r *Kround2) UnmarshalJSON(j []byte) error {
 	}
 	for k, nm := range nmodBytes {
 		nm := nm
-		nmod[k] = saferith.ModulusFromBytes(nm)
+		modulus := arith.ModulusFromBytes(nm)
+		nmod[k] = &modulus
 	}
-	r.NModulus = nmod
-
 	s := make(map[party.ID]*saferith.Nat)
 	t := make(map[party.ID]*saferith.Nat)
 	sBytes := make(map[party.ID][]byte)
@@ -313,8 +308,11 @@ func (r *Kround2) UnmarshalJSON(j []byte) error {
 		nat := &saferith.Nat{}
 		t[k] = nat.SetBytes(tb)
 	}
-	r.S = s
-	r.T = t
+	peds := make(map[party.ID]*pedersen.Parameters)
+	for k := range nmod {
+		peds[k] = pedersen.New(nmod[k], s[k], t[k])
+	}
+	r.Pedersen = peds
 
 	var elgmlsecret curve.Secp256k1Scalar
 	if err := json.Unmarshal(tmp["ElGamalSecret"], &elgmlsecret); err != nil {
