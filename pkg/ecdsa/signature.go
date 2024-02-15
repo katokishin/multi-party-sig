@@ -32,7 +32,7 @@ func (sig Signature) Verify(X curve.Point, hash []byte) bool {
 	return R2.Equal(sig.R)
 }
 
-// get a signature in ethereum format (R, S, yParity -- no longer R, S, V)
+// Return a 65 byte signature easily decoded for use in Ethereum (0x02 or 0x03, R.x, S)
 func (sig Signature) SigEthereum() ([]byte, error) {
 	IsOverHalfOrder := sig.S.IsOverHalfOrder() // s-values greater than secp256k1n/2 are considered invalid
 
@@ -40,10 +40,13 @@ func (sig Signature) SigEthereum() ([]byte, error) {
 		sig.S.Negate()
 	}
 
+	// Results in 33 bytes
+	// 0x02 for even y, 0x03 for odd y, followed by 32 bytes of r.x
 	r, err := sig.R.MarshalBinary()
 	if err != nil {
 		return nil, err
 	}
+	// 32 byte signature
 	s, err := sig.S.MarshalBinary()
 	if err != nil {
 		return nil, err
@@ -52,12 +55,6 @@ func (sig Signature) SigEthereum() ([]byte, error) {
 	rs := make([]byte, 0, 65)
 	rs = append(rs, r...)
 	rs = append(rs, s...)
-
-	if sig.R.(*curve.Secp256k1Point).HasEvenY() {
-		rs = append(rs, []byte{0x00}...)
-	} else {
-		rs = append(rs, []byte{0x01}...)
-	}
 
 	return rs, nil
 }
