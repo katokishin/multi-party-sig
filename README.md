@@ -25,7 +25,7 @@ No binary provided for armv7 (32 bit support requires in-depth adjustments to Go
 The following require NDK & CMake to be installed via Android Studio SDK Manager.
 See best answer to https://stackoverflow.com/questions/65366107/go-with-networking-on-android
 `CC=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang CXX=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang CGO_ENABLED=1 GOOS=android GOARCH=amd64 go build -buildmode=c-shared -o andgo-mpc-android-amd64.so main.go`
-`CC=/home/kishin/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CXX=/home/kishin/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -buildmode=c-shared -o andgo-mpc-android-arm64.so main.go`
+`CC=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CXX=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -buildmode=c-shared -o andgo-mpc-android-arm64.so main.go`
 No binary provided for armv7 (32 bit support requires in-depth adjustments to Go code)
 
 ### For iOS (amd64, arm64) -- NO armv7
