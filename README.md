@@ -1,9 +1,6 @@
 # Instructions for AndGo
 
-To build C shared library, run:
-
-`go build -buildmode=c-shared -o andgo-mpc.so main.go`
-
+## About
 This repository wraps the 0.6.0 release of taurusgroup/multi-party-sig and adds some convenience:
 
 - The ability to execute rounds of `cmp/keygen` and `cmp/sign` asynchronously
@@ -13,6 +10,37 @@ This repository wraps the 0.6.0 release of taurusgroup/multi-party-sig and adds 
 - Some bug fixes and feature additions that were added to main branch after alpha 0.6.0 release
 
 Ultimately this repository is to be used to create .so files to be used in NodeJS libraries and Expo modules.
+
+## Build Instructions
+To build C libraries, run:
+
+### For Linux (amd64, arm64)
+This one works natively on an x86_64 linux device without issue
+`CGO_ENABLED=1 GOOS=linux GOARCH=amd64 go build -buildmode=c-shared -o andgo-mpc-linux-amd64.so main.go`
+Get cross compiler for arm64 linux with `apt install gcc-aarch64-linux-gnu`
+`CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-gcc CGO_ENABLED=1 GOOS=linux GOARCH=arm64 go build -buildmode=c-shared -o andgo-mpc-linux-arm64.so main.go`
+No binary provided for armv7 (32 bit support requires in-depth adjustments to Go code)
+
+### For Android (amd64, arm64) -- NO armv7
+The following require NDK & CMake to be installed via Android Studio SDK Manager.
+See best answer to https://stackoverflow.com/questions/65366107/go-with-networking-on-android
+`CC=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang CXX=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang CGO_ENABLED=1 GOOS=android GOARCH=amd64 go build -buildmode=c-shared -o andgo-mpc-android-amd64.so main.go`
+`CC=/home/kishin/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CXX=/home/kishin/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -buildmode=c-shared -o andgo-mpc-android-arm64.so main.go`
+No binary provided for armv7 (32 bit support requires in-depth adjustments to Go code)
+
+### For iOS (amd64, arm64) -- NO armv7
+The following require XCode (& MacOS) !!! buildmode c-shared not supported on ios/amd64, ios/arm64
+`CC='xcrun --sdk iphoneos -f clang' CXX='xcrun --sdk iphoneos -f clang' CGO_ENABLED=1 GOOS=ios GOARCH=amd64 go build -buildmode=c-archive -o andgo-mpc-ios-amd64.a main.go`
+`CC='xcrun --sdk iphoneos -f clang' CXX='xcrun --sdk iphoneos -f clang' CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go build -buildmode=c-archive -o andgo-mpc-ios-arm64.a main.go`
+No binary provided for armv7 (32 bit support requires in-depth adjustments to Go code)
+
+### For MacOS & Windows (TODO)
+Mac and Windows not supported by default. The following commands have not yet been adapted or tested.
+The following require ???
+`CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -buildmode=c-shared -o andgo-mpc-darwin-amd64.dylib main.go`
+`CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -buildmode=c-shared -o andgo-mpc-darwin-arm64.dylib main.go`
+The following require ???
+`CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -buildmode=c-shared -o andgo-mpc.dll main.go`
 
 ## How the code works
 
