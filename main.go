@@ -10,8 +10,7 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
-	"runtime"
-	"runtime/debug"
+	"unsafe"
 
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/pkg/ecdsa"
@@ -29,8 +28,6 @@ func main() {
 // Put sample() in main to run Golang example
 
 func init() {
-	runtime.GOMAXPROCS(1)
-	debug.SetGCPercent(-1)
 }
 
 type KeygenOptions struct {
@@ -50,24 +47,6 @@ type ContKeygenParamsJSON struct {
 	Msgs    []protocol.Message
 }
 
-func (p *ContKeygenParams) UnmarshalJSON(j []byte) error {
-	var tmp map[string]json.RawMessage
-	e := json.Unmarshal(j, &tmp)
-	if e != nil {
-		return e
-	}
-
-	var h protocol.MultiHandler
-	if err := json.Unmarshal(tmp["Handler"], &h); err != nil {
-		return err
-	}
-	var ms []*protocol.Message
-	if err := json.Unmarshal(tmp["Msgs"], &ms); err != nil {
-		return err
-	}
-	return nil
-}
-
 type ContKeygenResult struct {
 	Handler     *protocol.MultiHandler
 	Config      *cmp.Config
@@ -83,12 +62,16 @@ func StartKeygenC(opts *C.char) *C.char {
 	e := json.Unmarshal([]byte(o), &optStruct)
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	h, e := StartKeygen(optStruct)
 	if e != nil {
 		fmt.Println("StartKeygen Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 
 	// Using handler, run ContKeygen one time
@@ -99,16 +82,22 @@ func StartKeygenC(opts *C.char) *C.char {
 	rr, e := ContKeygen(p)
 	if e != nil {
 		fmt.Println("ContKeygen Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 
 	// Return results
 	rrJson, e := json.Marshal(rr)
 	if e != nil {
 		fmt.Println("JSON Marshal Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
-	return C.CString(string(rrJson))
+	ret := C.CString(string(rrJson))
+	defer C.free(unsafe.Pointer(ret))
+	return ret
 }
 
 //export ContKeygenC
@@ -119,7 +108,9 @@ func ContKeygenC(opts *C.char) *C.char {
 	e := json.Unmarshal([]byte(o), &optString)
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error at optString:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 
 	optStruct := ContKeygenParams{}
@@ -127,28 +118,38 @@ func ContKeygenC(opts *C.char) *C.char {
 	e = json.Unmarshal(optString["Msgs"], &messages)
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error getting Msgs:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	optStruct.Msgs = messages
 
 	h, e := MultiHandlerFromJSON(optString["Handler"])
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error getting Handler:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	optStruct.Handler = h
 
 	r, e := ContKeygen(optStruct)
 	if e != nil {
 		fmt.Println("ContKeygen Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	rJson, e := json.Marshal(r)
 	if e != nil {
 		fmt.Println("JSON Marshal Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
-	return C.CString(string(rJson))
+	ret := C.CString(string(rJson))
+	defer C.free(unsafe.Pointer(ret))
+	return ret
 }
 
 func StartKeygen(opts KeygenOptions) (*protocol.MultiHandler, error) {
@@ -175,7 +176,7 @@ func StartKeygen(opts KeygenOptions) (*protocol.MultiHandler, error) {
 // Case 3: No handler is passed -> Error
 func ContKeygen(params ContKeygenParams) (r ContKeygenResult, e error) {
 	if params.Handler == nil {
-		return ContKeygenResult{}, fmt.Errorf("No handler found")
+		return ContKeygenResult{}, fmt.Errorf("no handler found")
 	}
 	r.Handler = params.Handler
 	// If no message params, attempt to process round
@@ -194,7 +195,7 @@ func ContKeygen(params ContKeygenParams) (r ContKeygenResult, e error) {
 	// also attempt to process round if .ReceivedAll()
 	bool := r.Handler.AddReceivedMsgs(params.Msgs)
 	r.AllReceived = bool
-	if r.AllReceived == true {
+	if r.AllReceived {
 		// Get messages to send/broadcast, if any
 		r.Msgs = r.Handler.ProcessRound()
 		// If the protocol has completed, return config file
@@ -263,12 +264,16 @@ func StartSignC(opts *C.char) *C.char {
 	e := json.Unmarshal([]byte(o), &optStruct)
 	if e != nil {
 		fmt.Println("JSON.Unmarshal Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	h, e := StartSign(optStruct)
 	if e != nil {
 		fmt.Println("StartSign Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 
 	// Run ContSign one time using handler
@@ -279,15 +284,21 @@ func StartSignC(opts *C.char) *C.char {
 	rr, e := ContSign(p)
 	if e != nil {
 		fmt.Println("ContSign Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	// Return JSON
 	rrJson, e := json.Marshal(rr)
 	if e != nil {
 		fmt.Println(e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
-	return C.CString(string(rrJson))
+	ret := C.CString(string(rrJson))
+	defer C.free(unsafe.Pointer(ret))
+	return ret
 }
 
 //export ContSignC
@@ -297,7 +308,9 @@ func ContSignC(opts *C.char) *C.char {
 	e := json.Unmarshal([]byte(o), &optString)
 	if e != nil {
 		fmt.Println("JSON.Unmarshal Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 
 	optStruct := ContSignParams{}
@@ -305,28 +318,38 @@ func ContSignC(opts *C.char) *C.char {
 	e = json.Unmarshal(optString["Msgs"], &messages)
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error getting Msgs:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	optStruct.Msgs = messages
 
 	h, e := MultiHandlerFromJSON(optString["Handler"])
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error getting Handler:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	optStruct.Handler = h
 
 	r, e := ContSign(optStruct)
 	if e != nil {
 		fmt.Println("ContSign Error:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	rJson, e := json.Marshal(r)
 	if e != nil {
 		fmt.Println(e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
-	return C.CString(string(rJson))
+	ret := C.CString(string(rJson))
+	defer C.free(unsafe.Pointer(ret))
+	return ret
 }
 
 func StartSign(opts SignOptions) (*protocol.MultiHandler, error) {
@@ -357,7 +380,7 @@ func ContSign(params ContSignParams) (r ContSignResult, e error) {
 	// If message(s) in params, add to handler
 	// also attempt to process round if .ReceivedAll()
 	r.AllReceived = r.Handler.AddReceivedMsgs(params.Msgs)
-	if r.AllReceived == true {
+	if r.AllReceived {
 		// Get messages to send/broadcast, if any
 		r.Msgs = r.Handler.ProcessRound()
 		// If the protocol has completed, return signatures
@@ -402,21 +425,29 @@ func deriveC(opts *C.char) *C.char {
 	o := C.GoString(opts)
 	if e := json.Unmarshal([]byte(o), &dStruct); e != nil {
 		fmt.Println("Failed to unmarhal DeriveParams @ dStruct:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 	bip32Child, e := dStruct.Config.DerivePath(dStruct.DerivationPath)
 	if e != nil {
 		fmt.Println("Failed to derive BIP32 child @ deriveC:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 
 	cJson, e := json.Marshal(bip32Child)
 	if e != nil {
 		fmt.Println("Failed to marshalJSON BIP32 child @ deriveC:", e)
-		return C.CString(e.Error())
+		ret := C.CString(e.Error())
+		defer C.free(unsafe.Pointer(ret))
+		return ret
 	}
 
-	return C.CString(string(cJson))
+	ret := C.CString(string(cJson))
+	defer C.free(unsafe.Pointer(ret))
+	return ret
 }
 
 func MultiHandlerFromJSON(j []byte) (*protocol.MultiHandler, error) {
@@ -580,7 +611,7 @@ after_cr_judgement:
 				rdsS1.Helper = &rdHelper
 				rounds[1] = &rdsS1
 			} else {
-				return nil, fmt.Errorf("Could not unmarshal rounds[1]")
+				return nil, fmt.Errorf("could not unmarshal rounds[1]")
 			}
 		case 1:
 			if err := json.Unmarshal(r, &tmpRd); err != nil {
@@ -599,7 +630,7 @@ after_cr_judgement:
 				}
 				rounds[2] = &rdsS2
 			} else {
-				return nil, fmt.Errorf("Could not unmarshal rounds[2]")
+				return nil, fmt.Errorf("could not unmarshal rounds[2]")
 			}
 		case 2:
 			if err := json.Unmarshal(r, &tmpRd); err != nil {
@@ -618,7 +649,7 @@ after_cr_judgement:
 				}
 				rounds[3] = &rdsS3
 			} else {
-				return nil, fmt.Errorf("Could not unmarshal rounds[3]")
+				return nil, fmt.Errorf("could not unmarshal rounds[3]")
 			}
 		case 3:
 			if err := json.Unmarshal(r, &tmpRd); err != nil {
@@ -637,7 +668,7 @@ after_cr_judgement:
 				}
 				rounds[4] = &rdsS4
 			} else {
-				return nil, fmt.Errorf("Could not unmarshal rounds[4]")
+				return nil, fmt.Errorf("could not unmarshal rounds[4]")
 			}
 		case 4:
 			if err := json.Unmarshal(r, &tmpRd); err != nil {
@@ -656,7 +687,7 @@ after_cr_judgement:
 				}
 				rounds[5] = &rdsS5
 			} else {
-				return nil, fmt.Errorf("Could not unmarshal rounds[5]")
+				return nil, fmt.Errorf("could not unmarshal rounds[5]")
 			}
 		default:
 			fmt.Println("Unknown round")
@@ -783,6 +814,10 @@ func sample() {
 			return
 		}
 		e2 = json.Unmarshal(aj, &aliceHandler)
+		if e2 != nil {
+			fmt.Println(e2)
+			return
+		}
 
 		// fmt.Println(aliceProcessResult)  // [message: round 2, from: alice, to , protocol: cmp/keygen-threshold]
 		// aliceHandler.PrintCurrentRound() // 2, 3, 4, 5, 5
@@ -826,7 +861,15 @@ func sample() {
 	// These return new *cmp.Config
 	fmt.Println("Attempting BIP32 child key derivation...")
 	aliceBip32Child, err := aRes.Config.DerivePath("m/0/0/0")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 	bobBip32Child, err := bRes.Config.DerivePath("m/0/0/0")
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
 
 	// Sign example
 	// Sign a message with these child shares
@@ -895,4 +938,22 @@ func sample() {
 	fmt.Printf("%+v %+v\n", aSRes.Sig, aSRes.SigEthereum)
 	fmt.Printf("%+v %+v\n", bSRes.Sig, bSRes.SigEthereum)
 
+}
+
+func (p *ContKeygenParams) UnmarshalJSON(j []byte) error {
+	var tmp map[string]json.RawMessage
+	e := json.Unmarshal(j, &tmp)
+	if e != nil {
+		return e
+	}
+
+	var h protocol.MultiHandler
+	if err := json.Unmarshal(tmp["Handler"], &h); err != nil {
+		return err
+	}
+	var ms []*protocol.Message
+	if err := json.Unmarshal(tmp["Msgs"], &ms); err != nil {
+		return err
+	}
+	return nil
 }
