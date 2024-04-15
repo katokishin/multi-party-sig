@@ -24,22 +24,27 @@ No binary provided for armv7 (32 bit support requires in-depth adjustments to Go
 ### For Android (amd64, arm64) -- NO armv7
 The following require NDK & CMake to be installed via Android Studio SDK Manager.
 See best answer to https://stackoverflow.com/questions/65366107/go-with-networking-on-android
-`CC=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang CXX=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang CGO_ENABLED=1 GOOS=android GOARCH=amd64 go build -buildmode=c-shared -o andgo-mpc-android-amd64.so main.go`
-`CC=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CXX=$(HOME)/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -buildmode=c-shared -o andgo-mpc-android-arm64.so main.go`
+`CC=$HOME/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang CXX=$HOME/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/x86_64-linux-android34-clang CGO_ENABLED=1 GOOS=android GOARCH=amd64 go build -buildmode=c-shared -o andgo-mpc-android-amd64.so main.go`
+`CC=$HOME/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CXX=$HOME/Android/Sdk/ndk/26.2.11394342/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android34-clang CGO_ENABLED=1 GOOS=android GOARCH=arm64 go build -buildmode=c-shared -o andgo-mpc-android-arm64.so main.go`
 No binary provided for armv7 (32 bit support requires in-depth adjustments to Go code)
 
-### For iOS (amd64, arm64) -- NO armv7
-The following require XCode (& MacOS) !!! buildmode c-shared not supported on ios/amd64, ios/arm64
-`CC='xcrun --sdk iphoneos -f clang' CXX='xcrun --sdk iphoneos -f clang' CGO_ENABLED=1 GOOS=ios GOARCH=amd64 go build -buildmode=c-archive -o andgo-mpc-ios-amd64.a main.go`
-`CC='xcrun --sdk iphoneos -f clang' CXX='xcrun --sdk iphoneos -f clang' CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go build -buildmode=c-archive -o andgo-mpc-ios-arm64.a main.go`
+### For iOS (arm64) -- NO armv7
+The following requires XCode (& MacOS). buildmode c-shared is not supported on ios.
+Note that it used to be GOOS=darwin before Apple Silicon.
+`SDKROOT=`xcrun --sdk iphoneos --show-sdk-path` CC=`xcrun --sdk iphoneos -f clang` CXX=`xcrun --sdk iphoneos -f clang` CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go build -buildmode=c-archive -o andgo-mpc-ios-arm64.a main.go`
 No binary provided for armv7 (32 bit support requires in-depth adjustments to Go code)
+
+### For iPhone Simulator (amd64, arm64)
+This one does not work yet on Apple Silicon Mac, need a cross compiler
+``SDKROOT=`xcrun --sdk iphonesimulator --show-sdk-path` CC=`xcrun --sdk iphonesimulator -f clang` CXX=`xcrun --sdk iphonesimulator -f clang` CGO_ENABLED=1 GOOS=ios GOARCH=amd64 go build -buildmode=c-archive -o andgo-mpc-ios-simulator-amd64.a main.go``x
+This one works on Apple Silicon Mac without issue
+``SDKROOT=`xcrun --sdk iphonesimulator --show-sdk-path` CC=`xcrun --sdk iphonesimulator -f clang` CXX=`xcrun --sdk iphonesimulator -f clang` CGO_ENABLED=1 GOOS=ios GOARCH=arm64 go build -buildmode=c-archive -o andgo-mpc-ios-simulator-arm64.a main.go``
 
 ### For MacOS & Windows (TODO)
-Mac and Windows not supported by default. The following commands have not yet been adapted or tested.
-The following require ???
+The following work as-is on Apple Silicon Macs:
 `CGO_ENABLED=1 GOOS=darwin GOARCH=amd64 go build -buildmode=c-shared -o andgo-mpc-darwin-amd64.dylib main.go`
 `CGO_ENABLED=1 GOOS=darwin GOARCH=arm64 go build -buildmode=c-shared -o andgo-mpc-darwin-arm64.dylib main.go`
-The following require ???
+The following require ??? (Not yet tested)
 `CGO_ENABLED=1 GOOS=windows GOARCH=amd64 go build -buildmode=c-shared -o andgo-mpc.dll main.go`
 
 ## How the code works
