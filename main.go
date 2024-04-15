@@ -10,7 +10,6 @@ import "C"
 import (
 	"encoding/json"
 	"fmt"
-	"unsafe"
 
 	"github.com/taurusgroup/multi-party-sig/internal/round"
 	"github.com/taurusgroup/multi-party-sig/pkg/ecdsa"
@@ -63,14 +62,16 @@ func StartKeygenC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	h, e := StartKeygen(optStruct)
 	if e != nil {
 		fmt.Println("StartKeygen Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 
@@ -83,7 +84,8 @@ func StartKeygenC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("ContKeygen Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 
@@ -92,11 +94,13 @@ func StartKeygenC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("JSON Marshal Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	ret := C.CString(string(rrJson))
-	defer C.free(unsafe.Pointer(ret))
+	// Freeing should happen in code that handles this
+	// defer C.free(unsafe.Pointer(ret))
 	return ret
 }
 
@@ -109,7 +113,8 @@ func ContKeygenC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error at optString:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 
@@ -119,7 +124,8 @@ func ContKeygenC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error getting Msgs:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	optStruct.Msgs = messages
@@ -128,7 +134,8 @@ func ContKeygenC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error getting Handler:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	optStruct.Handler = h
@@ -137,18 +144,21 @@ func ContKeygenC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("ContKeygen Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	rJson, e := json.Marshal(r)
 	if e != nil {
 		fmt.Println("JSON Marshal Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	ret := C.CString(string(rJson))
-	defer C.free(unsafe.Pointer(ret))
+	// Freeing should happen in code that handles this
+	// defer C.free(unsafe.Pointer(ret))
 	return ret
 }
 
@@ -265,14 +275,16 @@ func StartSignC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("JSON.Unmarshal Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	h, e := StartSign(optStruct)
 	if e != nil {
 		fmt.Println("StartSign Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 
@@ -285,7 +297,8 @@ func StartSignC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("ContSign Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	// Return JSON
@@ -293,11 +306,13 @@ func StartSignC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println(e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	ret := C.CString(string(rrJson))
-	defer C.free(unsafe.Pointer(ret))
+	// Freeing should happen in code that handles this
+	// defer C.free(unsafe.Pointer(ret))
 	return ret
 }
 
@@ -309,7 +324,8 @@ func ContSignC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("JSON.Unmarshal Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 
@@ -319,7 +335,8 @@ func ContSignC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error getting Msgs:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	optStruct.Msgs = messages
@@ -328,7 +345,8 @@ func ContSignC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("JSON Unmarshal Error getting Handler:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	optStruct.Handler = h
@@ -337,18 +355,21 @@ func ContSignC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("ContSign Error:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	rJson, e := json.Marshal(r)
 	if e != nil {
 		fmt.Println(e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	ret := C.CString(string(rJson))
-	defer C.free(unsafe.Pointer(ret))
+	// Freeing should happen in code that handles this
+	// defer C.free(unsafe.Pointer(ret))
 	return ret
 }
 
@@ -426,14 +447,16 @@ func deriveC(opts *C.char) *C.char {
 	if e := json.Unmarshal([]byte(o), &dStruct); e != nil {
 		fmt.Println("Failed to unmarhal DeriveParams @ dStruct:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 	bip32Child, e := dStruct.Config.DerivePath(dStruct.DerivationPath)
 	if e != nil {
 		fmt.Println("Failed to derive BIP32 child @ deriveC:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 
@@ -441,12 +464,14 @@ func deriveC(opts *C.char) *C.char {
 	if e != nil {
 		fmt.Println("Failed to marshalJSON BIP32 child @ deriveC:", e)
 		ret := C.CString(e.Error())
-		defer C.free(unsafe.Pointer(ret))
+		// Freeing should happen in code that handles this
+		// defer C.free(unsafe.Pointer(ret))
 		return ret
 	}
 
 	ret := C.CString(string(cJson))
-	defer C.free(unsafe.Pointer(ret))
+	// Freeing should happen in code that handles this
+	// defer C.free(unsafe.Pointer(ret))
 	return ret
 }
 
